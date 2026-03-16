@@ -57,3 +57,6 @@ bench.txt
 
 # profile
 *.pprof
+
+# binary
+/spanner-manager
