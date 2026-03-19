@@ -9,7 +9,7 @@ require (
 	github.com/spf13/cobra v1.10.2
 	go.yaml.in/yaml/v4 v4.0.0-rc.4.0.20260316011301-aadd5c28b882
 	google.golang.org/api v0.271.0
-	google.golang.org/grpc v1.79.2
+	google.golang.org/grpc v1.79.3
 )
 
 require (
