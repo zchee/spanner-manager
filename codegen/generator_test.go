@@ -53,7 +53,7 @@ func TestGenerator_Generate(t *testing.T) {
 
 	// Check that files were created.
 	expectedFiles := []string{
-		"yo_header.yo.go",
+		"spanner_header.yo.go",
 		"spanner_db.yo.go",
 		"users.yo.go",
 	}
@@ -145,13 +145,13 @@ func TestGenerator_Generate_IgnoreTables(t *testing.T) {
 	}
 
 	// Users file should exist.
-	if _, err := os.Stat(filepath.Join(outDir, "users.yo.go")); err != nil {
-		t.Errorf("users.yo.go should exist: %v", err)
+	if _, err := os.Stat(filepath.Join(outDir, "users.spanner.go")); err != nil {
+		t.Errorf("users.spanner.go should exist: %v", err)
 	}
 
 	// Secrets file should NOT exist.
-	if _, err := os.Stat(filepath.Join(outDir, "secrets.yo.go")); err == nil {
-		t.Error("secrets.yo.go should not exist (ignored)")
+	if _, err := os.Stat(filepath.Join(outDir, "secrets.spanner.go")); err == nil {
+		t.Error("secrets.spanner.go should not exist (ignored)")
 	}
 }
 
@@ -194,7 +194,7 @@ func TestGenerator_Generate_CustomConfig(t *testing.T) {
 		t.Fatalf("Generate() error = %v", err)
 	}
 
-	data, err := os.ReadFile(filepath.Join(outDir, "users.yo.go"))
+	data, err := os.ReadFile(filepath.Join(outDir, "users.spanner.go"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -261,7 +261,7 @@ func Find{{ .Type.Name }}ByPrimaryKey(db SpannerDB) string {
 		t.Fatalf("Generate() error = %v", err)
 	}
 
-	headerData, err := os.ReadFile(filepath.Join(outDir, "yo_header.yo.go"))
+	headerData, err := os.ReadFile(filepath.Join(outDir, "spanner_header.spanner.go"))
 	if err != nil {
 		t.Fatalf("reading overridden header file: %v", err)
 	}
@@ -269,7 +269,7 @@ func Find{{ .Type.Name }}ByPrimaryKey(db SpannerDB) string {
 		t.Errorf("header file does not contain override marker")
 	}
 
-	helperData, err := os.ReadFile(filepath.Join(outDir, "spanner_db.yo.go"))
+	helperData, err := os.ReadFile(filepath.Join(outDir, "spanner_db.spanner.go"))
 	if err != nil {
 		t.Fatalf("reading overridden spanner_db file: %v", err)
 	}
@@ -277,7 +277,7 @@ func Find{{ .Type.Name }}ByPrimaryKey(db SpannerDB) string {
 		t.Errorf("spanner_db file does not contain override marker")
 	}
 
-	typeData, err := os.ReadFile(filepath.Join(outDir, "users.yo.go"))
+	typeData, err := os.ReadFile(filepath.Join(outDir, "users.spanner.go"))
 	if err != nil {
 		t.Fatalf("reading overridden type file: %v", err)
 	}

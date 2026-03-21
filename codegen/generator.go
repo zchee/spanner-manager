@@ -32,10 +32,10 @@ const (
 	typeTemplateName      = "type.go.tmpl"
 )
 
-//go:embed templates/*.tmpl
+//go:embed languages/go/templates/*.tmpl
 var embeddedTemplateFS embed.FS
 
-var defaultTemplateFS = mustSubFS(embeddedTemplateFS, "templates")
+var defaultTemplateFS = mustSubFS(embeddedTemplateFS, "languages/go/templates")
 
 // Options configures the code generator.
 type Options struct {
@@ -57,7 +57,7 @@ type Generator struct {
 // NewGenerator creates a new Generator.
 func NewGenerator(opts Options) *Generator {
 	if opts.Suffix == "" {
-		opts.Suffix = ".yo.go"
+		opts.Suffix = ".spanner.go"
 	}
 	if opts.Language == "" {
 		opts.Language = "go"
@@ -147,7 +147,7 @@ func (g *Generator) applyConfig(schema *Schema) {
 }
 
 func (g *Generator) generateHeader(schema *Schema) error {
-	return g.writeTemplate("yo_header"+g.opts.Suffix, headerTemplateName, map[string]any{
+	return g.writeTemplate("spanner_header"+g.opts.Suffix, headerTemplateName, map[string]any{
 		"PackageName": g.opts.PackageName,
 		"Types":       schema.Types,
 	})

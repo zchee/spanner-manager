@@ -35,7 +35,7 @@ func {{ .Type.Name }}PrimaryKeys() []string {
 }
 
 // Insert returns a Mutation to insert a row into {{ .Type.Table }}.
-func (t *{{ .Type.Name }}) Insert(ctx context.Context) *spanner.Mutation {
+func (t *{{ .Type.Name }}) Insert() *spanner.Mutation {
 	return spanner.Insert("{{ .Type.Table }}", {{ .Type.Name }}Columns(), []any{
 {{- range .Type.Fields }}
 		t.{{ .Name }},
@@ -44,7 +44,7 @@ func (t *{{ .Type.Name }}) Insert(ctx context.Context) *spanner.Mutation {
 }
 
 // Update returns a Mutation to update a row in {{ .Type.Table }}.
-func (t *{{ .Type.Name }}) Update(ctx context.Context) *spanner.Mutation {
+func (t *{{ .Type.Name }}) Update() *spanner.Mutation {
 	return spanner.Update("{{ .Type.Table }}", {{ .Type.Name }}Columns(), []any{
 {{- range .Type.Fields }}
 		t.{{ .Name }},
@@ -53,7 +53,7 @@ func (t *{{ .Type.Name }}) Update(ctx context.Context) *spanner.Mutation {
 }
 
 // InsertOrUpdate returns a Mutation to insert or update a row in {{ .Type.Table }}.
-func (t *{{ .Type.Name }}) InsertOrUpdate(ctx context.Context) *spanner.Mutation {
+func (t *{{ .Type.Name }}) InsertOrUpdate() *spanner.Mutation {
 	return spanner.InsertOrUpdate("{{ .Type.Table }}", {{ .Type.Name }}Columns(), []any{
 {{- range .Type.Fields }}
 		t.{{ .Name }},
@@ -62,7 +62,7 @@ func (t *{{ .Type.Name }}) InsertOrUpdate(ctx context.Context) *spanner.Mutation
 }
 
 // Delete returns a Mutation to delete the {{ .Type.Name }} row.
-func (t *{{ .Type.Name }}) Delete(ctx context.Context) *spanner.Mutation {
+func (t *{{ .Type.Name }}) Delete() *spanner.Mutation {
 	return spanner.Delete("{{ .Type.Table }}", spanner.Key{
 {{- range .Type.PrimaryKeyFields }}
 		t.{{ .Name }},

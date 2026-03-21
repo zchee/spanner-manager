@@ -279,7 +279,7 @@ Generation writes a shared header file, a shared `spanner_db` helper, and one fi
 | `--language` | Target language (default: `go`) |
 | `--config` | YAML config file for custom type mappings |
 | `--ignore-tables` | Comma-separated or repeated table names to skip |
-| `--suffix` | Output file suffix (default: `.yo.go`) |
+| `--suffix` | Output file suffix (default: `.spanner.go`) |
 | `--template-path` | Override embedded templates directory |
 
 #### Codegen Config

@@ -106,7 +106,7 @@ Use --from-ddl to parse schema from a DDL file instead.`,
 	f.StringVar(&configFile, "config", "", "YAML config file for custom type mappings")
 	f.StringVar(&language, "language", "go", "target language")
 	f.StringSliceVar(&ignoreTables, "ignore-tables", nil, "tables to skip")
-	f.StringVar(&suffix, "suffix", ".yo.go", "output file suffix")
+	f.StringVar(&suffix, "suffix", ".spanner.go", "output file suffix")
 	f.StringVar(&templatePath, "template-path", "", "override embedded templates directory")
 
 	return cmd
