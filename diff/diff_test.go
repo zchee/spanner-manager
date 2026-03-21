@@ -18,10 +18,27 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/cloudspannerecosystem/memefish/ast"
 	"github.com/google/go-cmp/cmp"
 
 	"github.com/zchee/spanner-manager/sqlutil"
 )
+
+func mustParseDatabaseFromString(t *testing.T, ddl string) *Database {
+	t.Helper()
+
+	stmts, err := sqlutil.SplitStatements(ddl)
+	if err != nil {
+		t.Fatalf("SplitStatements() error = %v", err)
+	}
+
+	db, err := ParseDatabase(stmts)
+	if err != nil {
+		t.Fatalf("ParseDatabase() error = %v", err)
+	}
+
+	return db
+}
 
 func TestDiff_NoDifferences(t *testing.T) {
 	ddl := []string{
@@ -1306,4 +1323,417 @@ OPTIONS(distance_type='EUCLIDEAN');
 			}
 		})
 	}
+}
+
+func TestDiff_CoverageBranches(t *testing.T) {
+	tests := []struct {
+		name string
+		from string
+		to   string
+		want []Statement
+	}{
+		{
+			name: "timestamp set not null allow commit true",
+			from: `CREATE TABLE t1 (id INT64 NOT NULL, ts TIMESTAMP) PRIMARY KEY(id);`,
+			to:   `CREATE TABLE t1 (id INT64 NOT NULL, ts TIMESTAMP NOT NULL OPTIONS (allow_commit_timestamp=true)) PRIMARY KEY(id);`,
+			want: []Statement{
+				{Kind: sqlutil.KindDML, SQL: `UPDATE t1 SET ts = TIMESTAMP "0001-01-01T00:00:00Z" WHERE ts IS NULL`},
+				{Kind: sqlutil.KindDDL, SQL: `ALTER TABLE t1 ALTER COLUMN ts TIMESTAMP NOT NULL`},
+				{Kind: sqlutil.KindDDL, SQL: `ALTER TABLE t1 ALTER COLUMN ts SET OPTIONS (allow_commit_timestamp = true)`},
+			},
+		},
+		{
+			name: "timestamp clear allow commit and nullable",
+			from: `CREATE TABLE t1 (id INT64 NOT NULL, ts TIMESTAMP NOT NULL OPTIONS (allow_commit_timestamp=true)) PRIMARY KEY(id);`,
+			to:   `CREATE TABLE t1 (id INT64 NOT NULL, ts TIMESTAMP) PRIMARY KEY(id);`,
+			want: []Statement{
+				{Kind: sqlutil.KindDDL, SQL: `ALTER TABLE t1 ALTER COLUMN ts TIMESTAMP`},
+				{Kind: sqlutil.KindDDL, SQL: `ALTER TABLE t1 ALTER COLUMN ts SET OPTIONS (allow_commit_timestamp = null)`},
+			},
+		},
+		{
+			name: "replace row deletion policy",
+			from: `CREATE TABLE t1 (id INT64 NOT NULL, created_at TIMESTAMP NOT NULL) PRIMARY KEY(id), ROW DELETION POLICY (OLDER_THAN(created_at, INTERVAL 30 DAY));`,
+			to:   `CREATE TABLE t1 (id INT64 NOT NULL, created_at TIMESTAMP NOT NULL) PRIMARY KEY(id), ROW DELETION POLICY (OLDER_THAN(created_at, INTERVAL 60 DAY));`,
+			want: []Statement{
+				{Kind: sqlutil.KindDDL, SQL: `ALTER TABLE t1 REPLACE ROW DELETION POLICY ( OLDER_THAN ( created_at, INTERVAL 60 DAY ))`},
+			},
+		},
+		{
+			name: "drop row deletion policy",
+			from: `CREATE TABLE t1 (id INT64 NOT NULL, created_at TIMESTAMP NOT NULL) PRIMARY KEY(id), ROW DELETION POLICY (OLDER_THAN(created_at, INTERVAL 30 DAY));`,
+			to:   `CREATE TABLE t1 (id INT64 NOT NULL, created_at TIMESTAMP NOT NULL) PRIMARY KEY(id);`,
+			want: []Statement{
+				{Kind: sqlutil.KindDDL, SQL: `ALTER TABLE t1 DROP ROW DELETION POLICY`},
+			},
+		},
+		{
+			name: "drop fk before dropping column",
+			from: `CREATE TABLE parent (code STRING(36) NOT NULL) PRIMARY KEY(code); CREATE TABLE child (id INT64 NOT NULL, code STRING(36), CONSTRAINT FK_Parent FOREIGN KEY (code) REFERENCES parent (code)) PRIMARY KEY(id);`,
+			to:   `CREATE TABLE parent (code STRING(36) NOT NULL) PRIMARY KEY(code); CREATE TABLE child (id INT64 NOT NULL) PRIMARY KEY(id);`,
+			want: []Statement{
+				{Kind: sqlutil.KindDDL, SQL: `ALTER TABLE child DROP CONSTRAINT FK_Parent`},
+				{Kind: sqlutil.KindDDL, SQL: `ALTER TABLE child DROP COLUMN code`},
+			},
+		},
+		{
+			name: "drop stored column from existing index",
+			from: `CREATE TABLE t1 (id INT64 NOT NULL, email STRING(100), age INT64) PRIMARY KEY(id); CREATE INDEX idx_t1_email ON t1(email) STORING (age);`,
+			to:   `CREATE TABLE t1 (id INT64 NOT NULL, email STRING(100), age INT64) PRIMARY KEY(id); CREATE INDEX idx_t1_email ON t1(email);`,
+			want: []Statement{
+				{Kind: sqlutil.KindDDL, SQL: `ALTER INDEX idx_t1_email DROP STORED COLUMN age`},
+			},
+		},
+		{
+			name: "drop recreate column with regular index",
+			from: `CREATE TABLE t1 (id INT64 NOT NULL, c STRING(36)) PRIMARY KEY(id); CREATE INDEX idx_t1_c ON t1(c);`,
+			to:   `CREATE TABLE t1 (id INT64 NOT NULL, c INT64 NOT NULL) PRIMARY KEY(id); CREATE INDEX idx_t1_c ON t1(c);`,
+			want: []Statement{
+				{Kind: sqlutil.KindDDL, SQL: `DROP INDEX idx_t1_c`},
+				{Kind: sqlutil.KindDDL, SQL: `ALTER TABLE t1 DROP COLUMN c`},
+				{Kind: sqlutil.KindDDL, SQL: `ALTER TABLE t1 ADD COLUMN c INT64 NOT NULL DEFAULT (0)`},
+				{Kind: sqlutil.KindDDL, SQL: `ALTER TABLE t1 ALTER COLUMN c DROP DEFAULT`},
+				{Kind: sqlutil.KindDDL, SQL: `CREATE INDEX idx_t1_c ON t1(c)`},
+			},
+		},
+		{
+			name: "drop recreate generated token column with search index",
+			from: `CREATE TABLE t1 (id INT64 NOT NULL, body STRING(MAX), tok TOKENLIST AS (TOKENIZE_FULLTEXT(body)) HIDDEN) PRIMARY KEY(id); CREATE SEARCH INDEX sidx_t1_tok ON t1(tok);`,
+			to:   `CREATE TABLE t1 (id INT64 NOT NULL, body STRING(MAX), tok TOKENLIST AS (TOKENIZE_SUBSTRING(body)) HIDDEN) PRIMARY KEY(id); CREATE SEARCH INDEX sidx_t1_tok ON t1(tok);`,
+			want: []Statement{
+				{Kind: sqlutil.KindDDL, SQL: `DROP SEARCH INDEX sidx_t1_tok`},
+				{Kind: sqlutil.KindDDL, SQL: `ALTER TABLE t1 DROP COLUMN tok`},
+				{Kind: sqlutil.KindDDL, SQL: `ALTER TABLE t1 ADD COLUMN tok TOKENLIST AS (TOKENIZE_SUBSTRING(body)) HIDDEN`},
+				{Kind: sqlutil.KindDDL, SQL: `CREATE SEARCH INDEX sidx_t1_tok ON t1(tok)`},
+			},
+		},
+		{
+			name: "revoke on column before drop column",
+			from: `CREATE ROLE role1; CREATE TABLE T1 (id INT64, name STRING(100)); GRANT SELECT(name) ON TABLE T1 TO ROLE role1;`,
+			to:   `CREATE ROLE role1; CREATE TABLE T1 (id INT64);`,
+			want: []Statement{
+				{Kind: sqlutil.KindDDL, SQL: `ALTER TABLE T1 DROP COLUMN name`},
+			},
+		},
+		{
+			name: "recreate table on primary key change",
+			from: `CREATE TABLE T1 (id INT64 NOT NULL, name STRING(100)) PRIMARY KEY(id);`,
+			to:   `CREATE TABLE T1 (id INT64 NOT NULL, name STRING(100)) PRIMARY KEY(name);`,
+			want: []Statement{
+				{Kind: sqlutil.KindDDL, SQL: `DROP TABLE T1`},
+				{Kind: sqlutil.KindDDL, SQL: "CREATE TABLE T1 (\n  id INT64 NOT NULL,\n  name STRING(100)\n) PRIMARY KEY (name)"},
+			},
+		},
+		{
+			name: "recreate table on interleave change",
+			from: `CREATE TABLE P1 (pid INT64 NOT NULL) PRIMARY KEY(pid); CREATE TABLE P2 (pid INT64 NOT NULL) PRIMARY KEY(pid); CREATE TABLE C1 (id INT64 NOT NULL) PRIMARY KEY(id), INTERLEAVE IN PARENT P1 ON DELETE CASCADE;`,
+			to:   `CREATE TABLE P1 (pid INT64 NOT NULL) PRIMARY KEY(pid); CREATE TABLE P2 (pid INT64 NOT NULL) PRIMARY KEY(pid); CREATE TABLE C1 (id INT64 NOT NULL) PRIMARY KEY(id), INTERLEAVE IN PARENT P2 ON DELETE NO ACTION;`,
+			want: []Statement{
+				{Kind: sqlutil.KindDDL, SQL: `DROP TABLE C1`},
+				{Kind: sqlutil.KindDDL, SQL: "CREATE TABLE C1 (\n  id INT64 NOT NULL\n) PRIMARY KEY (id),\n  INTERLEAVE IN PARENT P2 ON DELETE NO ACTION"},
+			},
+		},
+		{
+			name: "change stream tables to none with option removal",
+			from: `CREATE TABLE Singers (id INT64 NOT NULL) PRIMARY KEY(id); CREATE TABLE Albums (id INT64 NOT NULL) PRIMARY KEY(id); CREATE CHANGE STREAM SomeStream FOR Singers(id), Albums OPTIONS (retention_period='7d');`,
+			to:   `CREATE TABLE Singers (id INT64 NOT NULL) PRIMARY KEY(id); CREATE TABLE Albums (id INT64 NOT NULL) PRIMARY KEY(id); CREATE CHANGE STREAM SomeStream;`,
+			want: []Statement{
+				{Kind: sqlutil.KindDDL, SQL: `ALTER CHANGE STREAM SomeStream DROP FOR ALL`},
+				{Kind: sqlutil.KindDDL, SQL: `ALTER CHANGE STREAM SomeStream SET OPTIONS (retention_period = null)`},
+			},
+		},
+		{
+			name: "change stream tables to different tables",
+			from: `CREATE TABLE Singers (id INT64 NOT NULL) PRIMARY KEY(id); CREATE TABLE Albums (id INT64 NOT NULL) PRIMARY KEY(id); CREATE CHANGE STREAM SomeStream FOR Singers(id);`,
+			to:   `CREATE TABLE Singers (id INT64 NOT NULL) PRIMARY KEY(id); CREATE TABLE Albums (id INT64 NOT NULL) PRIMARY KEY(id); CREATE CHANGE STREAM SomeStream FOR Albums;`,
+			want: []Statement{
+				{Kind: sqlutil.KindDDL, SQL: `ALTER CHANGE STREAM SomeStream SET FOR Albums`},
+			},
+		},
+		{
+			name: "change stream keeps remaining watched table before drop",
+			from: `CREATE TABLE Users (id INT64 NOT NULL) PRIMARY KEY(id); CREATE TABLE Accounts (id INT64 NOT NULL) PRIMARY KEY(id); CREATE CHANGE STREAM cs FOR Users, Accounts;`,
+			to:   `CREATE TABLE Accounts (id INT64 NOT NULL) PRIMARY KEY(id); CREATE CHANGE STREAM cs FOR Accounts;`,
+			want: []Statement{
+				{Kind: sqlutil.KindDDL, SQL: `ALTER CHANGE STREAM cs SET FOR Accounts`},
+				{Kind: sqlutil.KindDDL, SQL: `DROP TABLE Users`},
+			},
+		},
+		{
+			name: "search index recreate same name",
+			from: `CREATE TABLE t1 (id INT64 NOT NULL, tok TOKENLIST AS (TOKENIZE_FULLTEXT(body)) HIDDEN, body STRING(MAX)) PRIMARY KEY(id); CREATE SEARCH INDEX sidx_t1_tok ON t1(tok);`,
+			to:   `CREATE TABLE t1 (id INT64 NOT NULL, tok TOKENLIST AS (TOKENIZE_FULLTEXT(body)) HIDDEN, body STRING(MAX)) PRIMARY KEY(id); CREATE SEARCH INDEX sidx_t1_tok ON t1(tok) STORING (body);`,
+			want: []Statement{
+				{Kind: sqlutil.KindDDL, SQL: `DROP SEARCH INDEX sidx_t1_tok`},
+				{Kind: sqlutil.KindDDL, SQL: `CREATE SEARCH INDEX sidx_t1_tok ON t1(tok) STORING (body)`},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			from := mustParseDatabaseFromString(t, tt.from)
+			to := mustParseDatabaseFromString(t, tt.to)
+
+			got, err := Diff(from, to)
+			if err != nil {
+				t.Fatalf("Diff() error = %v", err)
+			}
+
+			if diff := cmp.Diff(tt.want, got); diff != "" {
+				t.Errorf("Diff() mismatch (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+func TestDiff_HelperCoverage(t *testing.T) {
+	t.Run("defaultByScalarTypeName", func(t *testing.T) {
+		tests := []struct {
+			name ast.ScalarTypeName
+			want string
+		}{
+			{ast.BoolTypeName, "FALSE"},
+			{ast.Int64TypeName, "0"},
+			{ast.Float64TypeName, "0"},
+			{ast.StringTypeName, `""`},
+			{ast.BytesTypeName, `b""`},
+			{ast.DateTypeName, `DATE "0001-01-01"`},
+			{ast.TimestampTypeName, `TIMESTAMP "0001-01-01T00:00:00Z"`},
+			{ast.NumericTypeName, `NUMERIC "0"`},
+			{ast.JSONTypeName, `JSON "{}"`},
+			{ast.TokenListTypeName, `b""`},
+		}
+
+		for _, tt := range tests {
+			if got := defaultByScalarTypeName(tt.name).SQL(); got != tt.want {
+				t.Fatalf("defaultByScalarTypeName(%s) = %q, want %q", tt.name, got, tt.want)
+			}
+		}
+	})
+
+	t.Run("low level helpers", func(t *testing.T) {
+		if got := exprSQL(nil); got != "" {
+			t.Fatalf("exprSQL(nil) = %q, want empty string", got)
+		}
+
+		if got := optionsSQL(nil); got != "" {
+			t.Fatalf("optionsSQL(nil) = %q, want empty string", got)
+		}
+
+		if got := normalizeConstraintSQL(`CONSTRAINT fk FOREIGN KEY (c) REFERENCES p (id) ON DELETE NO ACTION`); got != `CONSTRAINT fk FOREIGN KEY (c) REFERENCES p (id)` {
+			t.Fatalf("normalizeConstraintSQL() = %q", got)
+		}
+
+		if got := normalizeOnDelete(""); got != "NO ACTION" {
+			t.Fatalf("normalizeOnDelete(\"\") = %q", got)
+		}
+
+		if got := normalizeDirection(""); got != ast.DirectionAsc {
+			t.Fatalf("normalizeDirection(\"\") = %q", got)
+		}
+
+		if got := comparableInterleaveIn(nil); got != "" {
+			t.Fatalf("comparableInterleaveIn(nil) = %q", got)
+		}
+
+		tsDefault := updateDML{
+			Table: &ast.Path{Idents: []*ast.Ident{{Name: "t1"}}},
+			Def: &ast.ColumnDef{
+				Name: &ast.Ident{Name: "ts"},
+				Type: &ast.ScalarSchemaType{Name: ast.TimestampTypeName},
+			},
+		}
+		if got := tsDefault.defaultValue().SQL(); got != `TIMESTAMP "0001-01-01T00:00:00Z"` {
+			t.Fatalf("updateDML.defaultValue(timestamp) = %q", got)
+		}
+
+		arrayDefault := updateDML{
+			Table: &ast.Path{Idents: []*ast.Ident{{Name: "t1"}}},
+			Def: &ast.ColumnDef{
+				Name: &ast.Ident{Name: "tags"},
+				Type: &ast.ArraySchemaType{Item: &ast.SizedSchemaType{Name: ast.StringTypeName, Max: true}},
+			},
+		}
+		if got := arrayDefault.defaultValue().SQL(); got != "ARRAY[]" {
+			t.Fatalf("updateDML.defaultValue(array) = %q", got)
+		}
+	})
+
+	t.Run("generator helpers", func(t *testing.T) {
+		db := mustParseDatabaseFromString(t, `
+CREATE TABLE parent (
+  code STRING(36) NOT NULL,
+) PRIMARY KEY(code);
+CREATE TABLE child (
+  id INT64 NOT NULL,
+  code STRING(36),
+  tok TOKENLIST AS (TOKENIZE_FULLTEXT(code)) HIDDEN,
+  CONSTRAINT FK_Parent FOREIGN KEY (code) REFERENCES parent (code),
+) PRIMARY KEY(id);
+CREATE INDEX idx_child_code ON child(code) STORING (tok);
+CREATE SEARCH INDEX sidx_child_tok ON child(tok);
+`)
+
+		g := &generator{
+			from:                   db,
+			to:                     db,
+			droppedConstraintBySQL: map[string]struct{}{},
+			droppedIndexByKey:      map[string]struct{}{},
+		}
+
+		child := db.Tables["child"]
+		if _, ok := g.findIdentByKey(child.Indexes[0].Raw.Storing.Columns, comparableIdentName("tok")); !ok {
+			t.Fatalf("findIdentByKey() did not find storing column")
+		}
+
+		if got := g.findIndexesByColumn(child.Indexes, comparableIdentName("code")); len(got) != 1 {
+			t.Fatalf("findIndexesByColumn() len = %d, want 1", len(got))
+		}
+
+		if got := g.findSearchIndexesByColumn(child.SearchIndexes, comparableIdentName("tok")); len(got) != 1 {
+			t.Fatalf("findSearchIndexesByColumn() len = %d, want 1", len(got))
+		}
+
+		if _, ok := g.findNamedConstraint(child.Constraints, comparableIdentName("FK_Parent")); !ok {
+			t.Fatalf("findNamedConstraint() did not find named constraint")
+		}
+
+		fromUnnamed := mustParseDatabaseFromString(t, `
+CREATE TABLE p (
+  id INT64 NOT NULL,
+) PRIMARY KEY(id);
+CREATE TABLE c (
+  id INT64 NOT NULL,
+  pid INT64,
+  FOREIGN KEY (pid) REFERENCES p (id),
+) PRIMARY KEY(id);
+`)
+		toUnnamed := mustParseDatabaseFromString(t, `
+CREATE TABLE p (
+  id INT64 NOT NULL,
+) PRIMARY KEY(id);
+CREATE TABLE c (
+  id INT64 NOT NULL,
+  pid INT64,
+  FOREIGN KEY (pid) REFERENCES p (id) ON DELETE NO ACTION,
+) PRIMARY KEY(id);
+`)
+
+		g2 := &generator{}
+		if !g2.constraintEqual(fromUnnamed.Tables["c"].Constraints[0], toUnnamed.Tables["c"].Constraints[0]) {
+			t.Fatalf("constraintEqual() should treat omitted and explicit NO ACTION as equal")
+		}
+		if _, ok := g2.findUnnamedConstraint(fromUnnamed.Tables["c"].Constraints, toUnnamed.Tables["c"].Constraints[0]); !ok {
+			t.Fatalf("findUnnamedConstraint() did not match equivalent unnamed constraint")
+		}
+
+		drops := g.generateDropNamedConstraint(child.Raw.Name, child.Constraints[0])
+		if len(drops) != 1 || drops[0].SQL != `ALTER TABLE child DROP CONSTRAINT FK_Parent` {
+			t.Fatalf("generateDropNamedConstraint() = %#v", drops)
+		}
+		if len(g.generateDropNamedConstraint(child.Raw.Name, child.Constraints[0])) != 0 {
+			t.Fatalf("generateDropNamedConstraint() duplicate should return no statements")
+		}
+		if !g.isDroppedConstraint(child.Constraints[0]) {
+			t.Fatalf("isDroppedConstraint() = false, want true")
+		}
+
+		g.droppedIndexByKey[child.Indexes[0].Key] = struct{}{}
+		if !g.isDroppedIndex(child.Indexes[0].Key) {
+			t.Fatalf("isDroppedIndex() = false, want true")
+		}
+
+		arrayCol := &ast.ColumnDef{
+			Name:    &ast.Ident{Name: "tags"},
+			Type:    &ast.ArraySchemaType{Item: &ast.SizedSchemaType{Name: ast.StringTypeName, Max: true}},
+			NotNull: true,
+		}
+		if got := g.setDefaultSemantics(arrayCol).DefaultSemantics.SQL(); got != "DEFAULT (ARRAY[])" {
+			t.Fatalf("setDefaultSemantics(array) = %q", got)
+		}
+	})
+
+	t.Run("semantic helpers", func(t *testing.T) {
+		dbA := mustParseDatabaseFromString(t, `
+CREATE TABLE t1 (
+  id INT64 NOT NULL,
+  name STRING(100) DEFAULT ("a"),
+  created_at TIMESTAMP NOT NULL,
+) PRIMARY KEY(id), ROW DELETION POLICY (OLDER_THAN(created_at, INTERVAL 30 DAY));
+CREATE CHANGE STREAM cs1 FOR T1(name);
+CREATE SEARCH INDEX sidx ON t1(name);
+`)
+		dbB := mustParseDatabaseFromString(t, `
+CREATE TABLE t1 (
+  id INT64 NOT NULL,
+  name STRING(100) DEFAULT ("a"),
+  created_at TIMESTAMP NOT NULL,
+) PRIMARY KEY(id), ROW DELETION POLICY (OLDER_THAN(created_at, INTERVAL 30 DAY));
+CREATE CHANGE STREAM cs1 FOR T1(name);
+CREATE SEARCH INDEX sidx ON t1(name);
+`)
+		dbC := mustParseDatabaseFromString(t, `
+CREATE TABLE t1 (
+  id INT64 NOT NULL,
+  name STRING(100) DEFAULT ("b"),
+  created_at TIMESTAMP NOT NULL,
+) PRIMARY KEY(id), ROW DELETION POLICY (OLDER_THAN(created_at, INTERVAL 60 DAY));
+CREATE CHANGE STREAM cs1 FOR T1(id);
+CREATE SEARCH INDEX sidx ON t1(name) STORING (id);
+`)
+
+		g := &generator{}
+		if !g.searchIndexEqual(dbA.Tables["t1"].SearchIndexes[0].Raw, dbB.Tables["t1"].SearchIndexes[0].Raw) {
+			t.Fatalf("searchIndexEqual() = false, want true")
+		}
+		if g.searchIndexEqual(dbA.Tables["t1"].SearchIndexes[0].Raw, dbC.Tables["t1"].SearchIndexes[0].Raw) {
+			t.Fatalf("searchIndexEqual() = true, want false")
+		}
+		if !g.changeStreamForEqual(dbA.ChangeStreams["cs1"].Raw.For, dbB.ChangeStreams["cs1"].Raw.For) {
+			t.Fatalf("changeStreamForEqual() = false, want true")
+		}
+		if g.changeStreamForEqual(dbA.ChangeStreams["cs1"].Raw.For, dbC.ChangeStreams["cs1"].Raw.For) {
+			t.Fatalf("changeStreamForEqual() = true, want false")
+		}
+		if !g.columnDefaultExprEqual(dbA.Tables["t1"].Raw.Columns[1].DefaultSemantics, dbB.Tables["t1"].Raw.Columns[1].DefaultSemantics) {
+			t.Fatalf("columnDefaultExprEqual() = false, want true")
+		}
+		if g.columnDefaultExprEqual(dbA.Tables["t1"].Raw.Columns[1].DefaultSemantics, dbC.Tables["t1"].Raw.Columns[1].DefaultSemantics) {
+			t.Fatalf("columnDefaultExprEqual() = true, want false")
+		}
+		if !g.rowDeletionPolicyEqual(dbA.Tables["t1"].RowDeletionPolicy, dbB.Tables["t1"].RowDeletionPolicy) {
+			t.Fatalf("rowDeletionPolicyEqual() = false, want true")
+		}
+		if g.rowDeletionPolicyEqual(dbA.Tables["t1"].RowDeletionPolicy, dbC.Tables["t1"].RowDeletionPolicy) {
+			t.Fatalf("rowDeletionPolicyEqual() = true, want false")
+		}
+
+		colWithOptions := mustParseDatabaseFromString(t, `CREATE TABLE t1 (id INT64 NOT NULL, ts TIMESTAMP OPTIONS (allow_commit_timestamp=true)) PRIMARY KEY(id);`)
+		colWithoutOptions := mustParseDatabaseFromString(t, `CREATE TABLE t1 (id INT64 NOT NULL, ts TIMESTAMP) PRIMARY KEY(id);`)
+		if !g.optionValueEqual(colWithOptions.Tables["t1"].Raw.Columns[1].Options, colWithOptions.Tables["t1"].Raw.Columns[1].Options, "allow_commit_timestamp") {
+			t.Fatalf("optionValueEqual() = false, want true")
+		}
+		if g.optionValueEqual(colWithOptions.Tables["t1"].Raw.Columns[1].Options, colWithoutOptions.Tables["t1"].Raw.Columns[1].Options, "allow_commit_timestamp") {
+			t.Fatalf("optionValueEqual() = true, want false")
+		}
+	})
+
+	t.Run("privilege helpers", func(t *testing.T) {
+		db := mustParseDatabaseFromString(t, `CREATE ROLE role1; GRANT SELECT(col1), INSERT(col2), UPDATE(col3), DELETE ON TABLE T1 TO ROLE role1;`)
+		privilege := db.grants[0].Raw.Privilege.(*ast.PrivilegeOnTable)
+
+		if !hasPrivilegeOnColumn(privilege, &ast.Ident{Name: "col1"}) {
+			t.Fatalf("hasPrivilegeOnColumn(select) = false, want true")
+		}
+		if !hasPrivilegeOnColumn(privilege, &ast.Ident{Name: "col2"}) {
+			t.Fatalf("hasPrivilegeOnColumn(insert) = false, want true")
+		}
+		if !hasPrivilegeOnColumn(privilege, &ast.Ident{Name: "col3"}) {
+			t.Fatalf("hasPrivilegeOnColumn(update) = false, want true")
+		}
+		if hasPrivilegeOnColumn(privilege, &ast.Ident{Name: "missing"}) {
+			t.Fatalf("hasPrivilegeOnColumn(missing) = true, want false")
+		}
+	})
 }
