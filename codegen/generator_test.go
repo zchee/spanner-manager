@@ -203,3 +203,85 @@ func TestGenerator_Generate_CustomConfig(t *testing.T) {
 		t.Error("expected custom type json.RawMessage in generated code")
 	}
 }
+
+func TestGenerator_Generate_TemplatePathOverride(t *testing.T) {
+	outDir := filepath.Join(t.TempDir(), "models")
+	templateDir := filepath.Join(t.TempDir(), "templates")
+	if err := os.MkdirAll(templateDir, 0o755); err != nil {
+		t.Fatalf("creating template dir: %v", err)
+	}
+
+	files := map[string]string{
+		"header.go.tmpl": `package {{ .PackageName }}
+
+const HeaderOverrideMarker = "header override"
+`,
+		"spanner_db.go.tmpl": `package {{ .PackageName }}
+
+type SpannerDB interface{}
+
+var SpannerLog = func(...any) {}
+
+const SpannerDBOverrideMarker = "spanner override"
+`,
+		"type.go.tmpl": `package {{ .PackageName }}
+
+type {{ .Type.Name }} struct{}
+
+func Find{{ .Type.Name }}ByPrimaryKey(db SpannerDB) string {
+	_ = db
+	return "{{ .Type.Table }}"
+}
+`,
+	}
+
+	for name, content := range files {
+		if err := os.WriteFile(filepath.Join(templateDir, name), []byte(content), 0o644); err != nil {
+			t.Fatalf("writing override template %s: %v", name, err)
+		}
+	}
+
+	schema := &Schema{
+		Types: []Type{
+			{
+				Name:  "Users",
+				Table: "Users",
+			},
+		},
+	}
+
+	gen := NewGenerator(Options{
+		OutDir:       outDir,
+		PackageName:  "models",
+		Language:     "go",
+		TemplatePath: templateDir,
+	})
+
+	if err := gen.Generate(schema); err != nil {
+		t.Fatalf("Generate() error = %v", err)
+	}
+
+	headerData, err := os.ReadFile(filepath.Join(outDir, "yo_header.yo.go"))
+	if err != nil {
+		t.Fatalf("reading overridden header file: %v", err)
+	}
+	if !strings.Contains(string(headerData), `HeaderOverrideMarker = "header override"`) {
+		t.Errorf("header file does not contain override marker")
+	}
+
+	helperData, err := os.ReadFile(filepath.Join(outDir, "spanner_db.yo.go"))
+	if err != nil {
+		t.Fatalf("reading overridden spanner_db file: %v", err)
+	}
+	if !strings.Contains(string(helperData), `SpannerDBOverrideMarker = "spanner override"`) {
+		t.Errorf("spanner_db file does not contain override marker")
+	}
+
+	typeData, err := os.ReadFile(filepath.Join(outDir, "users.yo.go"))
+	if err != nil {
+		t.Fatalf("reading overridden type file: %v", err)
+	}
+	if !strings.Contains(string(typeData), `return "Users"`) {
+		t.Errorf("type file does not contain override body")
+	}
+}
