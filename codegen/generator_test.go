@@ -54,7 +54,7 @@ func TestGenerator_Generate(t *testing.T) {
 	// Check that files were created.
 	expectedFiles := []string{
 		"yo_header.yo.go",
-		"yo_db.yo.go",
+		"spanner_db.yo.go",
 		"users.yo.go",
 	}
 
@@ -79,6 +79,24 @@ func TestGenerator_Generate(t *testing.T) {
 		}
 	}
 
+	helperFile := filepath.Join(outDir, "spanner_db.yo.go")
+	helperData, err := os.ReadFile(helperFile)
+	if err != nil {
+		t.Fatalf("reading helper file: %v", err)
+	}
+	helperContent := string(helperData)
+
+	helperChecks := []string{
+		"type SpannerDB interface",
+		"var SpannerLog",
+	}
+
+	for _, check := range helperChecks {
+		if !strings.Contains(helperContent, check) {
+			t.Errorf("helper file missing %q", check)
+		}
+	}
+
 	// Verify the type file contains struct definition.
 	typeFile := filepath.Join(outDir, "users.yo.go")
 	data, err := os.ReadFile(typeFile)
@@ -95,6 +113,7 @@ func TestGenerator_Generate(t *testing.T) {
 		"func (t *Users) Update",
 		"func (t *Users) Delete",
 		"func FindUsersByPrimaryKey",
+		"db SpannerDB",
 	}
 
 	for _, check := range checks {

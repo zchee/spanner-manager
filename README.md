@@ -161,6 +161,8 @@ spanner-manager generate --from-ddl schema.sql -o ./models \
   --config codegen.yaml
 ```
 
+Generation writes a shared header file, a shared `spanner_db` helper, and one file per table into the output directory. This is useful when you want generated models checked into the repository.
+
 | Flag | Description |
 |---|---|
 | `-o, --out` | Output directory (required) |
