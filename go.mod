@@ -4,7 +4,7 @@ go 1.26
 
 require (
 	cloud.google.com/go/spanner v1.88.0
-	github.com/cloudspannerecosystem/memefish v0.6.2
+	github.com/cloudspannerecosystem/memefish v0.6.3-0.20260220015148-e01a84ded886
 	github.com/google/go-cmp v0.7.0
 	github.com/spf13/cobra v1.10.2
 	go.yaml.in/yaml/v4 v4.0.0-rc.4
