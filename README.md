@@ -19,6 +19,48 @@ Replaces three separate tools ([wrench](https://github.com/cloudspannerecosystem
 go install github.com/zchee/spanner-manager@latest
 ```
 
+## Quick Start
+
+### 1. Authenticate for real Cloud Spanner
+
+For production or staging projects, use Application Default Credentials or a service account key:
+
+```console
+# Option 1: local development with gcloud
+gcloud auth application-default login
+
+# Option 2: explicit service account key
+export GOOGLE_APPLICATION_CREDENTIALS=/path/to/service-account.json
+```
+
+If you are using the Spanner emulator, skip authentication and set `SPANNER_EMULATOR_HOST` instead.
+
+### 2. Export common connection settings
+
+You can pass flags on every command, but exporting environment variables is less repetitive:
+
+```console
+export SPANNER_PROJECT_ID=my-project
+export SPANNER_INSTANCE_ID=my-instance
+export SPANNER_DATABASE_ID=my-database
+```
+
+Then run commands without repeating `-p`, `-i`, and `-d` each time:
+
+```console
+spanner-manager db load
+spanner-manager migrate version
+spanner-manager generate -o ./models
+```
+
+### 3. Discover commands and flags
+
+```console
+spanner-manager --help
+spanner-manager schema --help
+spanner-manager schema apply --help
+```
+
 ## Configuration
 
 All connection parameters can be set via flags or environment variables. Flags take precedence.
@@ -34,7 +76,59 @@ All connection parameters can be set via flags or environment variables. Flags t
 
 When `--emulator-host` is set, the tool automatically uses insecure gRPC credentials and skips authentication.
 
+### Connection Requirements by Command
+
+Not every command needs a live Spanner connection. The common cases are:
+
+| Command | Project | Instance | Database | Notes |
+|---|---|---|---|---|
+| `instance create`, `instance delete` | required | required | not used | Creates or deletes an instance |
+| `db create`, `db drop`, `db reset`, `db load`, `db truncate` | required | required | required | `db create` and `db reset` can also read a local `--schema` file |
+| `migrate up`, `migrate version`, `migrate set` | required | required | required | Reads migration files from `migrations/` under `--directory` |
+| `schema apply` | required | required | required | Target database comes from global flags |
+| `schema export FILE`, `schema diff FILE1 FILE2` | not needed | not needed | not needed | Works entirely on local DDL files |
+| `schema export spanner://...`, `schema diff spanner://... FILE` | required inside URI | required inside URI | required inside URI | Global `--credentials` and `--emulator-host` still apply |
+| `generate --from-ddl schema.sql -o ./models` | not needed | not needed | not needed | Generates code without contacting Spanner |
+| `generate -o ./models` | required | required | required | Reads schema from `INFORMATION_SCHEMA` |
+| `migrate create NAME` | not needed | not needed | not needed | Creates the next file under `migrations/` |
+
 ## Usage
+
+### End-to-End Example on Managed Cloud Spanner
+
+This is the fastest way to understand the intended workflow:
+
+```console
+# 1. Create an instance once
+spanner-manager instance create --config regional-us-central1 --nodes 1
+
+# 2. Create the database with an initial schema
+spanner-manager db create --schema schema.sql
+
+# 3. Export the current DDL for review or version control
+spanner-manager db load --output current.sql
+
+# 4. Compare the current schema with a desired schema file
+spanner-manager schema diff current.sql desired.sql
+
+# 5. Apply the desired schema to the live database
+spanner-manager schema apply desired.sql
+
+# 6. Create and apply versioned migrations for incremental changes
+spanner-manager migrate create add_users_table
+spanner-manager migrate up
+
+# 7. Generate Go models from the live database
+spanner-manager generate -o ./models
+```
+
+If you prefer to inspect the live database directly during diffing, use a `spanner://` URI:
+
+```console
+spanner-manager schema diff \
+  spanner://projects/my-project/instances/my-instance/databases/my-database \
+  desired.sql
+```
 
 ### `db` -- Database Management
 
@@ -62,6 +156,8 @@ spanner-manager db load -p my-project -i my-instance -d my-db
 spanner-manager db load -p my-project -i my-instance -d my-db --output schema.sql
 ```
 
+Use `db create` or `db reset` when you already have a canonical DDL file. Use `db load` when you want to snapshot the live schema before a diff or commit it back to version control.
+
 ### `schema` -- Schema Diff and Apply
 
 Schema sources can be a local DDL file path or a `spanner://` URI:
@@ -80,6 +176,18 @@ spanner-manager schema diff old.sql new.sql
 spanner-manager schema diff spanner://projects/P/instances/I/databases/D desired.sql
 
 # Apply: diff current database against desired DDL, then execute the changes
+spanner-manager schema apply desired.sql -p my-project -i my-instance -d my-db
+```
+
+Recommended review flow before applying changes:
+
+```console
+# Inspect the exact ALTER statements first
+spanner-manager schema diff \
+  spanner://projects/my-project/instances/my-instance/databases/my-db \
+  desired.sql
+
+# Apply only after the diff looks correct
 spanner-manager schema apply desired.sql -p my-project -i my-instance -d my-db
 ```
 
@@ -170,7 +278,7 @@ Generation writes a shared header file, a shared `spanner_db` helper, and one fi
 | `--package` | Go package name (default: output directory name) |
 | `--language` | Target language (default: `go`) |
 | `--config` | YAML config file for custom type mappings |
-| `--ignore-tables` | Comma-separated tables to skip |
+| `--ignore-tables` | Comma-separated or repeated table names to skip |
 | `--suffix` | Output file suffix (default: `.yo.go`) |
 | `--template-path` | Override embedded templates directory |
 
@@ -228,14 +336,30 @@ spanner-manager version
 
 ```console
 # Start the Spanner emulator
-docker run -p 9010:9010 -p 9020:9020 gcr.io/cloud-spanner-emulator/emulator
+docker run --rm -p 9010:9010 -p 9020:9020 gcr.io/cloud-spanner-emulator/emulator
 
-# Use spanner-manager with the emulator
+# Point spanner-manager at the emulator
 export SPANNER_EMULATOR_HOST=localhost:9010
-spanner-manager db create -p test-project -i test-instance -d test-db --schema schema.sql
-spanner-manager migrate up -p test-project -i test-instance -d test-db
-spanner-manager generate --from-ddl schema.sql -o ./models
+export SPANNER_PROJECT_ID=test-project
+export SPANNER_INSTANCE_ID=test-instance
+export SPANNER_DATABASE_ID=test-db
+
+# Create the emulator instance first
+spanner-manager instance create --config emulator-config --nodes 1
+
+# Create the database and load a schema
+spanner-manager db create --schema schema.sql
+
+# Inspect or update schema just like a real Spanner database
+spanner-manager db load
+spanner-manager schema apply desired.sql
+
+# Run migrations and generate code
+spanner-manager migrate up
+spanner-manager generate -o ./models
 ```
+
+The emulator does not require credentials. The `emulator-config` instance config is the expected config name for local emulator instances in Cloud Spanner tooling.
 
 ## Architecture
 
