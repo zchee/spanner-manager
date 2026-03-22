@@ -17,6 +17,7 @@ package cmd
 import (
 	"fmt"
 	"os"
+	"strings"
 
 	"cloud.google.com/go/spanner"
 	"github.com/spf13/cobra"
@@ -232,18 +233,18 @@ func newDBLoadCmd(flags *globalFlags) *cobra.Command {
 				return err
 			}
 
-			output := ""
+			var output strings.Builder
 			for _, stmt := range ddl {
-				output += stmt + ";\n\n"
+				output.WriteString(stmt + ";\n\n")
 			}
 
 			if outputFile != "" {
-				if err := os.WriteFile(outputFile, []byte(output), 0o644); err != nil {
+				if err := os.WriteFile(outputFile, []byte(output.String()), 0o644); err != nil {
 					return fmt.Errorf("writing output file: %w", err)
 				}
 				fmt.Fprintf(cmd.OutOrStdout(), "Exported DDL to %s\n", outputFile)
 			} else {
-				fmt.Fprint(cmd.OutOrStdout(), output)
+				fmt.Fprint(cmd.OutOrStdout(), output.String())
 			}
 
 			return nil

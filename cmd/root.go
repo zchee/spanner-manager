@@ -26,7 +26,7 @@ import (
 	"github.com/zchee/spanner-manager/spannerutil"
 )
 
-const defaultTimeout = 1 * time.Hour
+const defaultTimeout = 60 * time.Second
 
 // globalFlags holds the values parsed from global persistent flags.
 type globalFlags struct {
@@ -64,10 +64,9 @@ func newRootCmd() *cobra.Command {
 		Long: `spanner-manager unifies Cloud Spanner schema migration, schema diffing,
 and Go ORM code generation into a single CLI.
 
-It replaces three separate tools (wrench, hammer, yo) with a coherent
-command structure, shared connection management, and a common SQL parser.`,
+Coherent command structure, shared connection management, and a common SQL parser.`,
 		SilenceUsage:  true,
-		SilenceErrors: true,
+		SilenceErrors: false,
 	}
 
 	// Register global persistent flags.
@@ -96,7 +95,7 @@ func newVersionCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "version",
 		Short: "Print the version of spanner-manager",
-		Run: func(cmd *cobra.Command, args []string) {
+		Run: func(*cobra.Command, []string) {
 			fmt.Println("spanner-manager version dev")
 		},
 	}
