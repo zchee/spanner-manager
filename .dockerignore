@@ -1,0 +1,10 @@
+.git/
+.github/
+vendor/
+.gitattributes
+.gitignore
+CODE_OF_CONDUCT.md
+Dockerfile
+LICENSE
+README.md
+spanner-manager
