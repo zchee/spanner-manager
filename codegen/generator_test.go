@@ -293,9 +293,8 @@ func TestGenerator_Generate_CommitTimestampHelpers(t *testing.T) {
 
 func TestGenerator_Generate_CompileGeneratedOutput(t *testing.T) {
 	tests := map[string]struct {
-		ddl        string
-		configure  func(t *testing.T, root string) Options
-		packageDir string
+		ddl       string
+		configure func(t *testing.T, root string) Options
 	}{
 		"success: timestamp array and commit timestamp compile": {
 			ddl: `CREATE TABLE Runs (

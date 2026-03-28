@@ -14,7 +14,13 @@
 
 package codegen
 
-import "strings"
+import (
+	"strings"
+
+	pluralize "github.com/gertd/go-pluralize"
+)
+
+var defaultPluralizer = pluralize.NewClient()
 
 func generatedRowName(tableName string, singularizeRows bool, rowSuffix string, inflections []Inflection) string {
 	name := snakeToCamel(tableName)
@@ -32,27 +38,34 @@ func generatedFileNameBase(rowName string) string {
 }
 
 func singularizeIdentifier(name string, inflections []Inflection) string {
-	lower := strings.ToLower(name)
-	for _, inflection := range inflections {
-		if strings.EqualFold(inflection.Plural, lower) || strings.EqualFold(inflection.Plural, name) {
-			return matchIdentifierCase(name, inflection.Singular)
-		}
-	}
-
-	switch {
-	case strings.HasSuffix(lower, "ies") && len(name) > 3:
-		return name[:len(name)-3] + "y"
-	case strings.HasSuffix(lower, "sses"),
-		strings.HasSuffix(lower, "shes"),
-		strings.HasSuffix(lower, "ches"),
-		strings.HasSuffix(lower, "xes"),
-		strings.HasSuffix(lower, "zes"):
-		return name[:len(name)-2]
-	case strings.HasSuffix(lower, "s") && !strings.HasSuffix(lower, "ss"):
-		return name[:len(name)-1]
-	default:
+	if name == "" {
 		return name
 	}
+
+	if singular, ok := applyCustomInflections(name, inflections); ok {
+		return singular
+	}
+
+	return defaultPluralizer.Singular(name)
+}
+
+func applyCustomInflections(name string, inflections []Inflection) (string, bool) {
+	lower := strings.ToLower(name)
+	for _, inflection := range inflections {
+		if inflection.Singular == "" || inflection.Plural == "" {
+			continue
+		}
+
+		pluralLower := strings.ToLower(inflection.Plural)
+		if !strings.HasSuffix(lower, pluralLower) {
+			continue
+		}
+
+		offset := len(name) - len(inflection.Plural)
+		return name[:offset] + matchIdentifierCase(name[offset:], inflection.Singular), true
+	}
+
+	return "", false
 }
 
 func matchIdentifierCase(existing, replacement string) string {
