@@ -65,13 +65,14 @@ func TestDDLFileSource_Load(t *testing.T) {
 		fieldIdx int
 		name     string
 		goType   string
+		baseType string
 		notNull  bool
 	}{
-		"UserId":    {fieldIdx: 0, name: "UserId", goType: "int64", notNull: true},
-		"Name":      {fieldIdx: 1, name: "Name", goType: "spanner.NullString", notNull: false},
-		"Email":     {fieldIdx: 2, name: "Email", goType: "string", notNull: true},
-		"Age":       {fieldIdx: 3, name: "Age", goType: "spanner.NullInt64", notNull: false},
-		"CreatedAt": {fieldIdx: 4, name: "CreatedAt", goType: "time.Time", notNull: true},
+		"UserId":    {fieldIdx: 0, name: "UserId", goType: "int64", baseType: "INT64", notNull: true},
+		"Name":      {fieldIdx: 1, name: "Name", goType: "spanner.NullString", baseType: "STRING", notNull: false},
+		"Email":     {fieldIdx: 2, name: "Email", goType: "string", baseType: "STRING", notNull: true},
+		"Age":       {fieldIdx: 3, name: "Age", goType: "spanner.NullInt64", baseType: "INT64", notNull: false},
+		"CreatedAt": {fieldIdx: 4, name: "CreatedAt", goType: "time.Time", baseType: "TIMESTAMP", notNull: true},
 	}
 
 	for name, tt := range tests {
@@ -82,6 +83,9 @@ func TestDDLFileSource_Load(t *testing.T) {
 			}
 			if f.GoType != tt.goType {
 				t.Errorf("field %s GoType = %q, want %q", tt.name, f.GoType, tt.goType)
+			}
+			if f.BaseSpannerType != tt.baseType {
+				t.Errorf("field %s BaseSpannerType = %q, want %q", tt.name, f.BaseSpannerType, tt.baseType)
 			}
 			if f.NotNull != tt.notNull {
 				t.Errorf("field %s NotNull = %v, want %v", tt.name, f.NotNull, tt.notNull)
@@ -95,6 +99,69 @@ func TestDDLFileSource_Load(t *testing.T) {
 	}
 	if typ.PrimaryKeyFields[0].Name != "UserId" {
 		t.Errorf("primary key field = %q, want %q", typ.PrimaryKeyFields[0].Name, "UserId")
+	}
+}
+
+func TestDDLFileSource_Load_ArrayAndCommitTimestamp(t *testing.T) {
+	ddl := `CREATE TABLE Runs (
+		RunId INT64 NOT NULL,
+		RepositoryIds ARRAY<STRING(MAX)>,
+		UpdatedAt TIMESTAMP NOT NULL OPTIONS (allow_commit_timestamp=true)
+	) PRIMARY KEY (RunId)`
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, "schema.sql")
+	if err := os.WriteFile(path, []byte(ddl), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	source := NewDDLFileSource(path)
+	schema, err := source.Load(t.Context())
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if len(schema.Types) != 1 {
+		t.Fatalf("expected 1 type, got %d", len(schema.Types))
+	}
+
+	got := schema.Types[0]
+	if diff := cmp.Diff([]Field{
+		{
+			Name:            "RunId",
+			ColumnName:      "RunId",
+			GoType:          "int64",
+			SpannerType:     "INT64",
+			BaseSpannerType: "INT64",
+			NotNull:         true,
+			IsPrimaryKey:    true,
+		},
+		{
+			Name:            "RepositoryIds",
+			ColumnName:      "RepositoryIds",
+			GoType:          "[]string",
+			SpannerType:     "ARRAY<STRING(MAX)>",
+			BaseSpannerType: "STRING",
+			IsArray:         true,
+		},
+		{
+			Name:                 "UpdatedAt",
+			ColumnName:           "UpdatedAt",
+			GoType:               "time.Time",
+			SpannerType:          "TIMESTAMP",
+			BaseSpannerType:      "TIMESTAMP",
+			NotNull:              true,
+			AllowCommitTimestamp: true,
+			Imports:              []ImportSpec{{Path: "time"}},
+		},
+	}, got.Fields); diff != "" {
+		t.Fatalf("fields mismatch (-want +got):\n%s", diff)
+	}
+
+	if diff := cmp.Diff([]Field{got.Fields[0]}, got.PrimaryKeyFields); diff != "" {
+		t.Fatalf("primary key fields mismatch (-want +got):\n%s", diff)
+	}
+	if diff := cmp.Diff([]Field{got.Fields[2]}, got.CommitTSFields); diff != "" {
+		t.Fatalf("commit timestamp fields mismatch (-want +got):\n%s", diff)
 	}
 }
 
@@ -137,7 +204,9 @@ func TestSpannerTypeToGo(t *testing.T) {
 		"TIMESTAMP nullable":   {spannerType: "TIMESTAMP", nullable: true, expected: "spanner.NullTime"},
 		"BYTES(256) not null":  {spannerType: "BYTES(256)", nullable: false, expected: "[]byte"},
 		"BYTES(256) nullable":  {spannerType: "BYTES(256)", nullable: true, expected: "[]byte"},
-		"unknown type":         {spannerType: "STRUCT<>", nullable: false, expected: "any"},
+		"STRING array":         {spannerType: "ARRAY<STRING(MAX)>", nullable: true, expected: "[]string"},
+		"TIMESTAMP array":      {spannerType: "ARRAY<TIMESTAMP>", nullable: false, expected: "[]time.Time"},
+		"unknown type":         {spannerType: "STRUCT<>", nullable: false, expected: "spanner.GenericColumnValue"},
 	}
 
 	for name, tt := range tests {
