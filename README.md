@@ -252,7 +252,9 @@ If a migration fails mid-execution, the version is marked dirty. Fix the issue, 
 
 ### `generate` -- Go Code Generation
 
-Generates type-safe Go structs with Spanner column tags, CRUD mutation methods (`Insert`, `Update`, `InsertOrUpdate`, `Delete`), and `FindByPrimaryKey` functions.
+Generates type-safe Go structs with Spanner column tags, CRUD mutation methods
+(`Insert`, `Update`, `InsertOrUpdate`, `Delete`), commit timestamp-aware helper
+methods, and `FindByPrimaryKey` functions.
 
 ```console
 # Generate from a live database
@@ -264,6 +266,9 @@ spanner-manager generate --from-ddl schema.sql -o ./models
 # Full example with all options
 spanner-manager generate --from-ddl schema.sql -o ./models \
   --package models \
+  --tables Runs,Projects \
+  --singularize-rows \
+  --row-suffix Row \
   --suffix .gen.go \
   --ignore-tables SchemaMigrations \
   --config codegen.yaml
@@ -278,27 +283,45 @@ Generation writes a shared header file, a shared `spanner_db` helper, and one fi
 | `--package` | Go package name (default: output directory name) |
 | `--language` | Target language (default: `go`) |
 | `--config` | YAML config file for custom type mappings |
+| `--tables` | Comma-separated or repeated table names to generate |
 | `--ignore-tables` | Comma-separated or repeated table names to skip |
+| `--singularize-rows` | Generate singular row type names from plural table names |
+| `--row-suffix` | Append a suffix to generated row type names |
 | `--suffix` | Output file suffix (default: `.spanner.go`) |
 | `--template-path` | Override embedded templates directory |
 
 #### Codegen Config
 
-The `--config` YAML file supports custom type mappings and inflections:
+The `--config` YAML file supports custom type mappings, typed JSON helpers, row
+name overrides, and inflections:
 
 ```yaml
 tables:
   - name: Users
+    row_name: UserRow
     columns:
       - name: metadata
+        json_type: "ProjectMetadata"
+        json_type_imports:
+          - "github.com/acme/project/models"
+      - name: raw_payload
         custom_type: "json.RawMessage"
+        imports:
+          - "encoding/json"
       - name: role
         custom_type: "UserRole"
+        imports:
+          - "github.com/acme/project/roles"
 
 inflections:
   - singular: "status"
     plural: "statuses"
 ```
+
+Use `json_type` for columns whose underlying Spanner type is `STRING` or `JSON`
+but whose payload should be exposed as a typed Go value. `json_type_imports`
+uses the same import syntax as `imports`, and import aliases can be expressed as
+`alias=github.com/acme/project/pkg`.
 
 #### Spanner Type Mapping
 
@@ -314,6 +337,10 @@ inflections:
 | `TIMESTAMP` | `time.Time` | `spanner.NullTime` |
 | `NUMERIC` | `big.Rat` | `spanner.NullNumeric` |
 | `JSON` | `spanner.NullJSON` | `spanner.NullJSON` |
+
+Array columns are mapped to Go slices when the element type is known. For
+example, `ARRAY<STRING(MAX)>` becomes `[]string` and `ARRAY<TIMESTAMP>` becomes
+`[]time.Time`.
 
 ### `instance` -- Instance Management
 

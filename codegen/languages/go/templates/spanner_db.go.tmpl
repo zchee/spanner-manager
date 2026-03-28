@@ -4,6 +4,7 @@ package {{ .PackageName }}
 
 import (
 	"context"
+	"encoding/json"
 
 	"cloud.google.com/go/spanner"
 )
@@ -16,3 +17,150 @@ type SpannerDB interface {
 
 // SpannerLog provides an optional logger for generated code.
 var SpannerLog = func(context.Context, string, ...any) {}
+
+// JSONString maps a STRING column that stores JSON into a typed Go value.
+type JSONString[T any] struct {
+	Value T
+	Valid bool
+}
+
+// NewJSONString creates a valid typed JSON string wrapper.
+func NewJSONString[T any](value T) JSONString[T] {
+	return JSONString[T]{
+		Value: value,
+		Valid: true,
+	}
+}
+
+// EncodeSpanner implements spanner.Encoder.
+func (v JSONString[T]) EncodeSpanner() (interface{}, error) {
+	if !v.Valid {
+		return spanner.NullString{}, nil
+	}
+	payload, err := json.Marshal(v.Value)
+	if err != nil {
+		return nil, err
+	}
+	return spanner.NullString{StringVal: string(payload), Valid: true}, nil
+}
+
+// DecodeSpanner implements spanner.Decoder.
+func (v *JSONString[T]) DecodeSpanner(input interface{}) error {
+	return decodeJSONValue(&v.Value, &v.Valid, input)
+}
+
+// IsNull reports whether the underlying value is null.
+func (v JSONString[T]) IsNull() bool {
+	return !v.Valid
+}
+
+// MarshalJSON implements json.Marshaler.
+func (v JSONString[T]) MarshalJSON() ([]byte, error) {
+	if !v.Valid {
+		return []byte("null"), nil
+	}
+	return json.Marshal(v.Value)
+}
+
+// UnmarshalJSON implements json.Unmarshaler.
+func (v *JSONString[T]) UnmarshalJSON(payload []byte) error {
+	return unmarshalJSONValue(&v.Value, &v.Valid, payload)
+}
+
+// JSONValue maps a JSON column into a typed Go value.
+type JSONValue[T any] struct {
+	Value T
+	Valid bool
+}
+
+// NewJSONValue creates a valid typed JSON wrapper.
+func NewJSONValue[T any](value T) JSONValue[T] {
+	return JSONValue[T]{
+		Value: value,
+		Valid: true,
+	}
+}
+
+// EncodeSpanner implements spanner.Encoder.
+func (v JSONValue[T]) EncodeSpanner() (interface{}, error) {
+	if !v.Valid {
+		return spanner.NullJSON{}, nil
+	}
+	return spanner.NullJSON{Value: v.Value, Valid: true}, nil
+}
+
+// DecodeSpanner implements spanner.Decoder.
+func (v *JSONValue[T]) DecodeSpanner(input interface{}) error {
+	return decodeJSONValue(&v.Value, &v.Valid, input)
+}
+
+// IsNull reports whether the underlying value is null.
+func (v JSONValue[T]) IsNull() bool {
+	return !v.Valid
+}
+
+// MarshalJSON implements json.Marshaler.
+func (v JSONValue[T]) MarshalJSON() ([]byte, error) {
+	if !v.Valid {
+		return []byte("null"), nil
+	}
+	return json.Marshal(v.Value)
+}
+
+// UnmarshalJSON implements json.Unmarshaler.
+func (v *JSONValue[T]) UnmarshalJSON(payload []byte) error {
+	return unmarshalJSONValue(&v.Value, &v.Valid, payload)
+}
+
+func decodeJSONValue[T any](dst *T, valid *bool, input interface{}) error {
+	switch value := input.(type) {
+	case nil:
+		return unmarshalJSONValue(dst, valid, nil)
+	case string:
+		return unmarshalJSONValue(dst, valid, []byte(value))
+	case *string:
+		if value == nil {
+			return unmarshalJSONValue(dst, valid, nil)
+		}
+		return unmarshalJSONValue(dst, valid, []byte(*value))
+	case []byte:
+		return unmarshalJSONValue(dst, valid, value)
+	case spanner.NullString:
+		if !value.Valid {
+			return unmarshalJSONValue(dst, valid, nil)
+		}
+		return unmarshalJSONValue(dst, valid, []byte(value.StringVal))
+	case spanner.NullJSON:
+		if !value.Valid {
+			return unmarshalJSONValue(dst, valid, nil)
+		}
+		payload, err := json.Marshal(value.Value)
+		if err != nil {
+			return err
+		}
+		return unmarshalJSONValue(dst, valid, payload)
+	default:
+		payload, err := json.Marshal(value)
+		if err != nil {
+			return err
+		}
+		return unmarshalJSONValue(dst, valid, payload)
+	}
+}
+
+func unmarshalJSONValue[T any](dst *T, valid *bool, payload []byte) error {
+	if payload == nil || string(payload) == "null" {
+		var zero T
+		*dst = zero
+		*valid = false
+		return nil
+	}
+
+	var decoded T
+	if err := json.Unmarshal(payload, &decoded); err != nil {
+		return err
+	}
+	*dst = decoded
+	*valid = true
+	return nil
+}

@@ -39,13 +39,16 @@ var defaultTemplateFS = mustSubFS(embeddedTemplateFS, "languages/go/templates")
 
 // Options configures the code generator.
 type Options struct {
-	OutDir       string
-	PackageName  string
-	Language     string
-	IgnoreTables []string
-	Suffix       string
-	TemplatePath string
-	Config       *Config
+	OutDir          string
+	PackageName     string
+	Language        string
+	IgnoreTables    []string
+	IncludeTables   []string
+	Suffix          string
+	TemplatePath    string
+	Config          *Config
+	SingularizeRows bool
+	RowSuffix       string
 }
 
 // Generator orchestrates code generation from a schema.
@@ -83,18 +86,23 @@ func (g *Generator) Generate(schema *Schema) error {
 		return fmt.Errorf("creating output directory: %w", err)
 	}
 
-	ignoreTables := make(map[string]bool)
-	for _, t := range g.opts.IgnoreTables {
-		ignoreTables[t] = true
-	}
+	g.applyGeneratedNames(schema)
 
 	// Apply custom type mappings from config.
 	if g.opts.Config != nil {
-		g.applyConfig(schema)
+		if err := g.applyConfig(schema); err != nil {
+			return fmt.Errorf("applying config: %w", err)
+		}
 	}
 
+	selectedTypes, err := g.filterTypes(schema.Types)
+	if err != nil {
+		return fmt.Errorf("selecting tables: %w", err)
+	}
+	filteredSchema := &Schema{Types: selectedTypes}
+
 	// Generate header file.
-	if err := g.generateHeader(schema); err != nil {
+	if err := g.generateHeader(filteredSchema); err != nil {
 		return fmt.Errorf("generating header: %w", err)
 	}
 
@@ -104,21 +112,32 @@ func (g *Generator) Generate(schema *Schema) error {
 	}
 
 	// Generate per-type files.
-	for _, t := range schema.Types {
-		if ignoreTables[t.Table] {
-			continue
-		}
-		if err := g.generateType(&t); err != nil {
-			return fmt.Errorf("generating type %s: %w", t.Name, err)
+	for i := range filteredSchema.Types {
+		if err := g.generateType(&filteredSchema.Types[i]); err != nil {
+			return fmt.Errorf("generating type %s: %w", filteredSchema.Types[i].Name, err)
 		}
 	}
 
 	return nil
 }
 
-func (g *Generator) applyConfig(schema *Schema) {
+func (g *Generator) applyGeneratedNames(schema *Schema) {
+	inflections := []Inflection(nil)
+	if g.opts.Config != nil {
+		inflections = g.opts.Config.Inflections
+	}
+
+	for i := range schema.Types {
+		rowName := generatedRowName(schema.Types[i].Table, g.opts.SingularizeRows, g.opts.RowSuffix, inflections)
+		schema.Types[i].Name = rowName
+		schema.Types[i].FileNameBase = generatedFileNameBase(rowName)
+		refreshTypeMetadata(&schema.Types[i])
+	}
+}
+
+func (g *Generator) applyConfig(schema *Schema) error {
 	if g.opts.Config == nil {
-		return
+		return nil
 	}
 
 	tableConfigs := make(map[string]*TableConfig)
@@ -127,23 +146,131 @@ func (g *Generator) applyConfig(schema *Schema) {
 		tableConfigs[tc.Name] = tc
 	}
 
+	seenTables := make(map[string]bool)
 	for i := range schema.Types {
 		tc, ok := tableConfigs[schema.Types[i].Table]
 		if !ok {
 			continue
 		}
+		seenTables[schema.Types[i].Table] = true
 
-		colConfigs := make(map[string]string)
-		for _, cc := range tc.Columns {
-			colConfigs[cc.Name] = cc.CustomType
+		if tc.RowName != "" {
+			schema.Types[i].Name = tc.RowName
+			schema.Types[i].FileNameBase = generatedFileNameBase(tc.RowName)
 		}
 
+		colConfigs := make(map[string]ColumnConfig)
+		for _, cc := range tc.Columns {
+			colConfigs[cc.Name] = cc
+		}
+
+		seenColumns := make(map[string]bool)
 		for j := range schema.Types[i].Fields {
-			if customType, ok := colConfigs[schema.Types[i].Fields[j].ColumnName]; ok {
-				schema.Types[i].Fields[j].GoType = customType
+			cc, ok := colConfigs[schema.Types[i].Fields[j].ColumnName]
+			if !ok {
+				continue
+			}
+			seenColumns[cc.Name] = true
+			if err := applyColumnConfig(&schema.Types[i].Fields[j], cc); err != nil {
+				return fmt.Errorf("table %q column %q: %w", schema.Types[i].Table, cc.Name, err)
 			}
 		}
+
+		for _, cc := range tc.Columns {
+			if !seenColumns[cc.Name] {
+				return fmt.Errorf("table %q config references unknown column %q", schema.Types[i].Table, cc.Name)
+			}
+		}
+		refreshTypeMetadata(&schema.Types[i])
 	}
+
+	for _, tc := range g.opts.Config.Tables {
+		if !seenTables[tc.Name] {
+			return fmt.Errorf("config references unknown table %q", tc.Name)
+		}
+	}
+
+	return nil
+}
+
+func applyColumnConfig(field *Field, cc ColumnConfig) error {
+	customImports, err := importSpecsFromConfig(cc.Imports)
+	if err != nil {
+		return err
+	}
+	jsonImports, err := importSpecsFromConfig(cc.JSONTypeImports)
+	if err != nil {
+		return err
+	}
+
+	switch {
+	case cc.JSONType != "":
+		if field.IsArray {
+			return fmt.Errorf("json_type is not supported for array columns")
+		}
+
+		var wrapper string
+		switch field.BaseSpannerType {
+		case "STRING":
+			wrapper = "JSONString"
+		case "JSON":
+			wrapper = "JSONValue"
+		default:
+			return fmt.Errorf("json_type requires STRING or JSON column, got %s", field.SpannerType)
+		}
+
+		field.GoType = fmt.Sprintf("%s[%s]", wrapper, cc.JSONType)
+		field.Imports = dedupeImportSpecs(append(
+			append(inferImportSpecsFromTypeExpr(field.GoType), customImports...),
+			jsonImports...,
+		))
+	case cc.CustomType != "":
+		field.GoType = cc.CustomType
+		field.Imports = dedupeImportSpecs(append(inferImportSpecsFromTypeExpr(field.GoType), customImports...))
+	default:
+		if len(customImports) > 0 || len(jsonImports) > 0 {
+			return fmt.Errorf("imports require custom_type or json_type")
+		}
+	}
+
+	return nil
+}
+
+func (g *Generator) filterTypes(types []Type) ([]Type, error) {
+	include := make(map[string]bool)
+	for _, table := range g.opts.IncludeTables {
+		include[table] = true
+	}
+
+	ignore := make(map[string]bool)
+	for _, table := range g.opts.IgnoreTables {
+		ignore[table] = true
+	}
+
+	filtered := make([]Type, 0, len(types))
+	seenIncluded := make(map[string]bool)
+	for _, typ := range types {
+		if len(include) > 0 && !include[typ.Table] {
+			continue
+		}
+		seenIncluded[typ.Table] = true
+		if ignore[typ.Table] {
+			continue
+		}
+		filtered = append(filtered, typ)
+	}
+
+	for table := range include {
+		if !seenIncluded[table] {
+			return nil, fmt.Errorf("unknown table %q", table)
+		}
+	}
+
+	if len(include) > 0 && len(filtered) == 0 {
+		return nil, fmt.Errorf("no tables selected after applying filters")
+	}
+
+	return filtered, nil
 }
 
 func (g *Generator) generateHeader(schema *Schema) error {
@@ -160,7 +287,11 @@ func (g *Generator) generateSpannerDB() error {
 }
 
 func (g *Generator) generateType(t *Type) error {
-	return g.writeTemplate(strings.ToLower(t.Name)+g.opts.Suffix, typeTemplateName, map[string]any{
+	filename := t.FileNameBase
+	if filename == "" {
+		filename = strings.ToLower(t.Name)
+	}
+	return g.writeTemplate(filename+g.opts.Suffix, typeTemplateName, map[string]any{
 		"PackageName": g.opts.PackageName,
 		"Type":        t,
 	})
@@ -173,6 +304,10 @@ func (g *Generator) writeTemplate(filename, templateName string, data any) error
 				return s
 			}
 			return strings.ToLower(s[:1]) + s[1:]
+		},
+		"commitTimestampExpr": func(field Field) string {
+			expr, _ := commitTimestampExpr(field)
+			return expr
 		},
 	}
 

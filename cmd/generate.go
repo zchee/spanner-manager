@@ -25,14 +25,17 @@ import (
 
 func newGenerateCmd(flags *globalFlags) *cobra.Command {
 	var (
-		fromDDL      bool
-		outDir       string
-		packageName  string
-		configFile   string
-		language     string
-		ignoreTables []string
-		suffix       string
-		templatePath string
+		fromDDL         bool
+		outDir          string
+		packageName     string
+		configFile      string
+		language        string
+		ignoreTables    []string
+		includeTables   []string
+		suffix          string
+		templatePath    string
+		singularizeRows bool
+		rowSuffix       string
 	)
 
 	cmd := &cobra.Command{
@@ -51,12 +54,15 @@ Use --from-ddl to parse schema from a DDL file instead.`,
 			}
 
 			opts := codegen.Options{
-				OutDir:       outDir,
-				PackageName:  packageName,
-				Language:     language,
-				IgnoreTables: ignoreTables,
-				Suffix:       suffix,
-				TemplatePath: templatePath,
+				OutDir:          outDir,
+				PackageName:     packageName,
+				Language:        language,
+				IgnoreTables:    ignoreTables,
+				IncludeTables:   includeTables,
+				Suffix:          suffix,
+				TemplatePath:    templatePath,
+				SingularizeRows: singularizeRows,
+				RowSuffix:       rowSuffix,
 			}
 
 			// Load config if specified.
@@ -106,7 +112,11 @@ Use --from-ddl to parse schema from a DDL file instead.`,
 	f.StringVar(&configFile, "config", "", "YAML config file for custom type mappings")
 	f.StringVar(&language, "language", "go", "target language")
 	f.StringSliceVar(&ignoreTables, "ignore-tables", nil, "tables to skip")
+	f.StringSliceVar(&includeTables, "tables", nil, "tables to generate")
+	f.StringSliceVar(&includeTables, "include-tables", nil, "alias of --tables")
 	f.StringVar(&suffix, "suffix", ".spanner.go", "output file suffix")
+	f.BoolVar(&singularizeRows, "singularize-rows", false, "generate singular row type names from plural table names")
+	f.StringVar(&rowSuffix, "row-suffix", "", "suffix to append to generated row type names")
 	f.StringVar(&templatePath, "template-path", "", "override embedded templates directory")
 
 	return cmd
