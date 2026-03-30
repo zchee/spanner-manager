@@ -15,6 +15,12 @@
 // Package codegen implements ORM code generation from Cloud Spanner schemas.
 package codegen
 
+// ImportSpec represents a Go import used by generated code.
+type ImportSpec struct {
+	Alias string
+	Path  string
+}
+
 // Schema represents a parsed database schema for code generation.
 type Schema struct {
 	Types []Type
@@ -24,20 +30,27 @@ type Schema struct {
 type Type struct {
 	Name             string
 	Table            string
+	FileNameBase     string
 	Fields           []Field
 	PrimaryKeyFields []Field
+	CommitTSFields   []Field
 	Indexes          []IndexInfo
+	Imports          []ImportSpec
 }
 
 // Field represents a column field in a generated type.
 type Field struct {
-	Name         string
-	ColumnName   string
-	GoType       string
-	SpannerType  string
-	NotNull      bool
-	IsGenerated  bool
-	IsPrimaryKey bool
+	Name                 string
+	ColumnName           string
+	GoType               string
+	SpannerType          string
+	BaseSpannerType      string
+	IsArray              bool
+	NotNull              bool
+	IsGenerated          bool
+	IsPrimaryKey         bool
+	AllowCommitTimestamp bool
+	Imports              []ImportSpec
 }
 
 // IndexInfo represents an index for code generation.

@@ -3,10 +3,9 @@
 package {{ .PackageName }}
 
 import (
-	"context"
-	"fmt"
-
-	"cloud.google.com/go/spanner"
+{{ range .Type.Imports }}
+	{{ if .Alias }}{{ .Alias }} {{ end }}"{{ .Path }}"
+{{ end }}
 )
 
 // {{ .Type.Name }} represents a row from '{{ .Type.Table }}'.
@@ -90,3 +89,58 @@ func Find{{ .Type.Name }}ByPrimaryKey(ctx context.Context, db SpannerDB{{ range 
 
 	return &t, nil
 }
+
+{{- if .Type.CommitTSFields }}
+
+// {{ .Type.Name }}CommitTimestampColumns returns the commit timestamp columns.
+func {{ .Type.Name }}CommitTimestampColumns() []string {
+	return []string{
+{{- range .Type.CommitTSFields }}
+		"{{ .ColumnName }}",
+{{- end }}
+	}
+}
+
+// SetCommitTimestamps assigns the Spanner commit timestamp placeholder to all
+// supported commit timestamp columns except the excluded column names.
+func (t *{{ .Type.Name }}) SetCommitTimestamps(excludeColumns ...string) {
+	if t == nil {
+		return
+	}
+
+	excluded := make(map[string]struct{}, len(excludeColumns))
+	for _, columnName := range excludeColumns {
+		excluded[columnName] = struct{}{}
+	}
+
+{{- range .Type.CommitTSFields }}
+	if _, skip := excluded["{{ .ColumnName }}"]; !skip {
+		t.{{ .Name }} = {{ commitTimestampExpr . }}
+	}
+{{- end }}
+}
+
+// InsertWithCommitTimestamps returns an insert mutation after applying commit
+// timestamp placeholders to supported columns.
+func (t *{{ .Type.Name }}) InsertWithCommitTimestamps(excludeColumns ...string) *spanner.Mutation {
+	row := *t
+	row.SetCommitTimestamps(excludeColumns...)
+	return row.Insert()
+}
+
+// UpdateWithCommitTimestamps returns an update mutation after applying commit
+// timestamp placeholders to supported columns.
+func (t *{{ .Type.Name }}) UpdateWithCommitTimestamps(excludeColumns ...string) *spanner.Mutation {
+	row := *t
+	row.SetCommitTimestamps(excludeColumns...)
+	return row.Update()
+}
+
+// InsertOrUpdateWithCommitTimestamps returns an upsert mutation after applying
+// commit timestamp placeholders to supported columns.
+func (t *{{ .Type.Name }}) InsertOrUpdateWithCommitTimestamps(excludeColumns ...string) *spanner.Mutation {
+	row := *t
+	row.SetCommitTimestamps(excludeColumns...)
+	return row.InsertOrUpdate()
+}
+{{- end }}

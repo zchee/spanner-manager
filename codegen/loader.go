@@ -90,6 +90,11 @@ func (s *InformationSchemaSource) loadType(ctx context.Context, tableName string
 		Table: tableName,
 	}
 
+	commitTimestampColumns, err := s.loadCommitTimestampColumns(ctx, tableName)
+	if err != nil {
+		return nil, fmt.Errorf("querying commit timestamp options: %w", err)
+	}
+
 	// Query columns.
 	iter := s.client.Single().Query(ctx, spanner.Statement{
 		SQL: `SELECT COLUMN_NAME, SPANNER_TYPE, IS_NULLABLE, IS_GENERATED,
@@ -107,13 +112,22 @@ func (s *InformationSchemaSource) loadType(ctx context.Context, tableName string
 			return err
 		}
 
+		typeInfo, err := goTypeForSpannerTypeString(spannerType, isNullable == "YES")
+		if err != nil {
+			return err
+		}
+
 		f := Field{
-			Name:        snakeToCamel(colName),
-			ColumnName:  colName,
-			SpannerType: spannerType,
-			GoType:      spannerTypeToGo(spannerType, isNullable == "YES"),
-			NotNull:     isNullable == "NO",
-			IsGenerated: isGenerated == "ALWAYS",
+			Name:                 snakeToCamel(colName),
+			ColumnName:           colName,
+			SpannerType:          spannerType,
+			BaseSpannerType:      typeInfo.BaseSpannerType,
+			IsArray:              typeInfo.IsArray,
+			GoType:               typeInfo.Expr,
+			NotNull:              isNullable == "NO",
+			IsGenerated:          isGenerated == "ALWAYS",
+			AllowCommitTimestamp: commitTimestampColumns[colName],
+			Imports:              typeInfo.Imports,
 		}
 		t.Fields = append(t.Fields, f)
 		return nil
@@ -176,7 +190,33 @@ func (s *InformationSchemaSource) loadType(ctx context.Context, tableName string
 		return nil, fmt.Errorf("querying indexes: %w", err)
 	}
 
+	refreshTypeMetadata(t)
+
 	return t, nil
+}
+
+func (s *InformationSchemaSource) loadCommitTimestampColumns(ctx context.Context, tableName string) (map[string]bool, error) {
+	iter := s.client.Single().Query(ctx, spanner.Statement{
+		SQL: `SELECT COLUMN_NAME, OPTION_VALUE
+			  FROM INFORMATION_SCHEMA.COLUMN_OPTIONS
+			  WHERE TABLE_SCHEMA = '' AND TABLE_NAME = @table
+			    AND OPTION_NAME = 'allow_commit_timestamp'`,
+		Params: map[string]any{"table": tableName},
+	})
+
+	columns := make(map[string]bool)
+	if err := iter.Do(func(row *spanner.Row) error {
+		var columnName, optionValue string
+		if err := row.Columns(&columnName, &optionValue); err != nil {
+			return err
+		}
+		columns[columnName] = strings.EqualFold(strings.TrimSpace(optionValue), "TRUE")
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+
+	return columns, nil
 }
 
 // DDLFileSource loads schema from a DDL file using memefish.
@@ -217,18 +257,23 @@ func (s *DDLFileSource) Load(_ context.Context) (*Schema, error) {
 		for _, col := range ct.Columns {
 			spannerType := col.Type.SQL()
 			notNull := col.NotNull
+			typeInfo := goTypeForSchemaType(col.Type, !notNull)
 
 			var isGenerated bool
 			if col.DefaultSemantics != nil {
 				_, isGenerated = col.DefaultSemantics.(*ast.GeneratedColumnExpr)
 			}
 			f := Field{
-				Name:        snakeToCamel(col.Name.Name),
-				ColumnName:  col.Name.Name,
-				SpannerType: spannerType,
-				GoType:      spannerTypeToGo(spannerType, !notNull),
-				NotNull:     notNull,
-				IsGenerated: isGenerated,
+				Name:                 snakeToCamel(col.Name.Name),
+				ColumnName:           col.Name.Name,
+				SpannerType:          spannerType,
+				BaseSpannerType:      typeInfo.BaseSpannerType,
+				IsArray:              typeInfo.IsArray,
+				GoType:               typeInfo.Expr,
+				NotNull:              notNull,
+				IsGenerated:          isGenerated,
+				AllowCommitTimestamp: columnHasTrueOption(col.Options, "allow_commit_timestamp"),
+				Imports:              typeInfo.Imports,
 			}
 			t.Fields = append(t.Fields, f)
 		}
@@ -243,6 +288,7 @@ func (s *DDLFileSource) Load(_ context.Context) (*Schema, error) {
 			}
 		}
 
+		refreshTypeMetadata(t)
 		schema.Types = append(schema.Types, *t)
 	}
 
@@ -257,66 +303,18 @@ func pathName(p *ast.Path) string {
 	return p.Idents[len(p.Idents)-1].Name
 }
 
-// spannerTypeToGo maps Spanner SQL types to Go types.
-func spannerTypeToGo(spannerType string, nullable bool) string {
-	base := strings.ToUpper(spannerType)
-
-	// Strip size from STRING(N), BYTES(N), etc.
-	if idx := strings.IndexByte(base, '('); idx >= 0 {
-		base = base[:idx]
+func columnHasTrueOption(options *ast.Options, name string) bool {
+	if options == nil {
+		return false
 	}
-
-	if nullable {
-		switch base {
-		case "BOOL":
-			return "spanner.NullBool"
-		case "INT64":
-			return "spanner.NullInt64"
-		case "FLOAT32":
-			return "spanner.NullFloat32"
-		case "FLOAT64":
-			return "spanner.NullFloat64"
-		case "STRING":
-			return "spanner.NullString"
-		case "BYTES":
-			return "[]byte"
-		case "DATE":
-			return "spanner.NullDate"
-		case "TIMESTAMP":
-			return "spanner.NullTime"
-		case "NUMERIC":
-			return "spanner.NullNumeric"
-		case "JSON":
-			return "spanner.NullJSON"
-		default:
-			return "any"
+	for _, record := range options.Records {
+		if record.Name.Name != name {
+			continue
 		}
+		lit, ok := record.Value.(*ast.BoolLiteral)
+		return ok && lit.Value
 	}
-
-	switch base {
-	case "BOOL":
-		return "bool"
-	case "INT64":
-		return "int64"
-	case "FLOAT32":
-		return "float32"
-	case "FLOAT64":
-		return "float64"
-	case "STRING":
-		return "string"
-	case "BYTES":
-		return "[]byte"
-	case "DATE":
-		return "civil.Date"
-	case "TIMESTAMP":
-		return "time.Time"
-	case "NUMERIC":
-		return "big.Rat"
-	case "JSON":
-		return "spanner.NullJSON"
-	default:
-		return "any"
-	}
+	return false
 }
 
 // snakeToCamel converts a snake_case string to CamelCase.
