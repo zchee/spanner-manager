@@ -235,7 +235,8 @@ func TestGenerator_Generate_CustomTypeImports(t *testing.T) {
 		data JSON,
 	) PRIMARY KEY (id)`
 
-	outDir := generateFromDDL(t, t.TempDir(), ddl, Options{
+	root := newCompileFixtureRoot(t)
+	outDir := generateFromDDL(t, root, ddl, Options{
 		PackageName: "models",
 		Config: &Config{
 			Tables: []TableConfig{
@@ -265,6 +266,12 @@ func TestGenerator_Generate_CustomTypeImports(t *testing.T) {
 			}
 		})
 	}
+
+	if got, want := strings.Count(content, `"encoding/json"`), 1; got != want {
+		t.Fatalf(`users.spanner.go imports "encoding/json" %d times, want %d`, got, want)
+	}
+
+	runGoTestDir(t, outDir)
 }
 
 func TestGenerator_Generate_CommitTimestampHelpers(t *testing.T) {

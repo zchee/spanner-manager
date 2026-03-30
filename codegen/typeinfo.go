@@ -196,8 +196,11 @@ func dedupeImportSpecs(imports []ImportSpec) []ImportSpec {
 		if spec.Path == "" {
 			continue
 		}
-		key := spec.Alias + "\x00" + spec.Path
-		seen[key] = spec
+		existing, ok := seen[spec.Path]
+		// Prefer an explicit alias over an inferred bare import for the same path.
+		if !ok || (existing.Alias == "" && spec.Alias != "") {
+			seen[spec.Path] = spec
+		}
 	}
 
 	out := make([]ImportSpec, 0, len(seen))
@@ -206,9 +209,6 @@ func dedupeImportSpecs(imports []ImportSpec) []ImportSpec {
 	}
 
 	sort.Slice(out, func(i, j int) bool {
-		if out[i].Path == out[j].Path {
-			return out[i].Alias < out[j].Alias
-		}
 		return out[i].Path < out[j].Path
 	})
 	return out
