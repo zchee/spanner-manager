@@ -165,7 +165,9 @@ func scalarGoType(name ast.ScalarTypeName, nullable bool) goTypeInfo {
 }
 
 func refreshTypeMetadata(t *Type) {
-	t.PrimaryKeyFields = t.PrimaryKeyFields[:0]
+	t.PrimaryKeyFields = refreshOrderedFields(t.Fields, t.PrimaryKeyFields, func(field Field) bool {
+		return field.IsPrimaryKey
+	})
 	t.CommitTSFields = t.CommitTSFields[:0]
 
 	imports := []ImportSpec{
@@ -176,9 +178,6 @@ func refreshTypeMetadata(t *Type) {
 	for i := range t.Fields {
 		field := t.Fields[i]
 		imports = append(imports, field.Imports...)
-		if field.IsPrimaryKey {
-			t.PrimaryKeyFields = append(t.PrimaryKeyFields, field)
-		}
 		if _, ok := commitTimestampExpr(field); ok {
 			t.CommitTSFields = append(t.CommitTSFields, field)
 		}
@@ -188,6 +187,40 @@ func refreshTypeMetadata(t *Type) {
 	if t.FileNameBase == "" {
 		t.FileNameBase = strings.ToLower(t.Name)
 	}
+}
+
+func refreshOrderedFields(fields, ordered []Field, include func(Field) bool) []Field {
+	fieldByColumn := make(map[string]Field, len(fields))
+	included := make([]Field, 0, len(fields))
+	for i := range fields {
+		field := fields[i]
+		if !include(field) {
+			continue
+		}
+		fieldByColumn[field.ColumnName] = field
+		included = append(included, field)
+	}
+	if len(ordered) == 0 {
+		return included
+	}
+
+	out := make([]Field, 0, len(included))
+	seen := make(map[string]struct{}, len(included))
+	for _, field := range ordered {
+		refreshed, ok := fieldByColumn[field.ColumnName]
+		if !ok {
+			continue
+		}
+		out = append(out, refreshed)
+		seen[field.ColumnName] = struct{}{}
+	}
+	for _, field := range included {
+		if _, ok := seen[field.ColumnName]; ok {
+			continue
+		}
+		out = append(out, field)
+	}
+	return out
 }
 
 func dedupeImportSpecs(imports []ImportSpec) []ImportSpec {

@@ -274,6 +274,40 @@ func TestGenerator_Generate_CustomTypeImports(t *testing.T) {
 	runGoTestDir(t, outDir)
 }
 
+func TestGenerator_Generate_CompositePrimaryKeyOrder(t *testing.T) {
+	ddl := `CREATE TABLE Memberships (
+		a INT64 NOT NULL,
+		b STRING(MAX) NOT NULL,
+	) PRIMARY KEY (b, a)`
+
+	root := newCompileFixtureRoot(t)
+	outDir := generateFromDDL(t, root, ddl, Options{PackageName: "models"})
+	content := readTextFile(t, filepath.Join(outDir, "memberships.spanner.go"))
+
+	tests := map[string]string{
+		"primary key column order": `func MembershipsPrimaryKeys() []string {
+	return []string{
+		"b",
+		"a",
+	}
+}`,
+		"find signature order": `func FindMembershipsByPrimaryKey(ctx context.Context, db SpannerDB, b string, a int64) (*Memberships, error)`,
+		"delete key order": `return spanner.Delete("Memberships", spanner.Key{
+		t.B,
+		t.A,
+	})`,
+	}
+	for name, want := range tests {
+		t.Run(name, func(t *testing.T) {
+			if !strings.Contains(content, want) {
+				t.Fatalf("memberships.spanner.go missing %q", want)
+			}
+		})
+	}
+
+	runGoTestDir(t, outDir)
+}
+
 func TestGenerator_Generate_CommitTimestampHelpers(t *testing.T) {
 	ddl := `CREATE TABLE Runs (
 		run_id INT64 NOT NULL,

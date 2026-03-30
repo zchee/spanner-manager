@@ -55,3 +55,41 @@ func TestDedupeImportSpecs(t *testing.T) {
 		})
 	}
 }
+
+func TestRefreshTypeMetadata_PreservesPrimaryKeyOrdinal(t *testing.T) {
+	typ := Type{
+		Fields: []Field{
+			{
+				Name:            "A",
+				ColumnName:      "a",
+				GoType:          "int64",
+				BaseSpannerType: "INT64",
+				IsPrimaryKey:    true,
+			},
+			{
+				Name:            "B",
+				ColumnName:      "b",
+				GoType:          "string",
+				BaseSpannerType: "STRING",
+				IsPrimaryKey:    true,
+			},
+			{
+				Name:                 "UpdatedAt",
+				ColumnName:           "updated_at",
+				GoType:               "spanner.NullTime",
+				BaseSpannerType:      "TIMESTAMP",
+				AllowCommitTimestamp: true,
+			},
+		},
+		PrimaryKeyFields: []Field{
+			{ColumnName: "b"},
+			{ColumnName: "a"},
+		},
+	}
+
+	refreshTypeMetadata(&typ)
+
+	if diff := cmp.Diff([]Field{typ.Fields[1], typ.Fields[0]}, typ.PrimaryKeyFields); diff != "" {
+		t.Fatalf("primary key fields mismatch (-want +got):\n%s", diff)
+	}
+}
