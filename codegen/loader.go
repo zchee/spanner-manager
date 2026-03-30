@@ -303,15 +303,6 @@ func pathName(p *ast.Path) string {
 	return p.Idents[len(p.Idents)-1].Name
 }
 
-// spannerTypeToGo maps Spanner SQL types to Go types.
-func spannerTypeToGo(spannerType string, nullable bool) string {
-	info, err := goTypeForSpannerTypeString(spannerType, nullable)
-	if err != nil {
-		return "any"
-	}
-	return info.Expr
-}
-
 func columnHasTrueOption(options *ast.Options, name string) bool {
 	if options == nil {
 		return false

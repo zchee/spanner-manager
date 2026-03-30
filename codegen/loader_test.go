@@ -186,35 +186,3 @@ func TestSnakeToCamel(t *testing.T) {
 		})
 	}
 }
-
-func TestSpannerTypeToGo(t *testing.T) {
-	tests := map[string]struct {
-		spannerType string
-		nullable    bool
-		expected    string
-	}{
-		"INT64 not null":       {spannerType: "INT64", nullable: false, expected: "int64"},
-		"INT64 nullable":       {spannerType: "INT64", nullable: true, expected: "spanner.NullInt64"},
-		"STRING(MAX) not null": {spannerType: "STRING(MAX)", nullable: false, expected: "string"},
-		"STRING(MAX) nullable": {spannerType: "STRING(MAX)", nullable: true, expected: "spanner.NullString"},
-		"BOOL not null":        {spannerType: "BOOL", nullable: false, expected: "bool"},
-		"BOOL nullable":        {spannerType: "BOOL", nullable: true, expected: "spanner.NullBool"},
-		"FLOAT64 not null":     {spannerType: "FLOAT64", nullable: false, expected: "float64"},
-		"TIMESTAMP not null":   {spannerType: "TIMESTAMP", nullable: false, expected: "time.Time"},
-		"TIMESTAMP nullable":   {spannerType: "TIMESTAMP", nullable: true, expected: "spanner.NullTime"},
-		"BYTES(256) not null":  {spannerType: "BYTES(256)", nullable: false, expected: "[]byte"},
-		"BYTES(256) nullable":  {spannerType: "BYTES(256)", nullable: true, expected: "[]byte"},
-		"STRING array":         {spannerType: "ARRAY<STRING(MAX)>", nullable: true, expected: "[]string"},
-		"TIMESTAMP array":      {spannerType: "ARRAY<TIMESTAMP>", nullable: false, expected: "[]time.Time"},
-		"unknown type":         {spannerType: "STRUCT<>", nullable: false, expected: "spanner.GenericColumnValue"},
-	}
-
-	for name, tt := range tests {
-		t.Run(name, func(t *testing.T) {
-			got := spannerTypeToGo(tt.spannerType, tt.nullable)
-			if diff := cmp.Diff(tt.expected, got); diff != "" {
-				t.Errorf("spannerTypeToGo(%q, %v) mismatch (-want +got):\n%s", tt.spannerType, tt.nullable, diff)
-			}
-		})
-	}
-}
