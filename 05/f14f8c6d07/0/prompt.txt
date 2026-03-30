@@ -41,7 +41,3 @@ Use this skill to turn the current worktree into reviewable git commits.
 - Call out skipped validation or blockers explicitly.
 
 </skill>
-
----
-
-Reviewed https://github.com/zchee/spanner-manager/pull/3#discussion_r3007912828, consider and fix suggested points.
