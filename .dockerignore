@@ -1,6 +1,15 @@
+.agent/
+.agents/
+.codex/
+.entire/
 .git/
 .github/
+.omc/
+.omx/
 vendor/
+
+.dockerignore
+.envrc
 .gitattributes
 .gitignore
 CODE_OF_CONDUCT.md
