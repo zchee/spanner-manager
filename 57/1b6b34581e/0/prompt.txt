@@ -1,0 +1,13 @@
+$ultrawork "Normalize all words that are conventionally capitalized in Go (such as IDs)."
+
+---
+
+$ultrawork "Normalize all words that are conventionally capitalized in Go (such as `ID`)."
+
+---
+
+$commit
+
+---
+
+Is `IDs` guarded against being converted to `IDS`?
