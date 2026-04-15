@@ -300,12 +300,7 @@ func (g *Generator) generateType(t *Type) error {
 
 func (g *Generator) writeTemplate(filename, templateName string, data any) error {
 	funcMap := template.FuncMap{
-		"lowerFirst": func(s string) string {
-			if s == "" {
-				return s
-			}
-			return strings.ToLower(s[:1]) + s[1:]
-		},
+		"lowerFirst": lowerCamel,
 		"commitTimestampExpr": func(field Field) string {
 			expr, _ := commitTimestampExpr(field)
 			return expr
@@ -378,7 +373,7 @@ func detectGoModuleConfig(startDir string) (modulePath, langVersion string) {
 }
 
 func parseGoModMetadata(data []byte) (modulePath, langVersion string) {
-	for _, line := range strings.Split(string(data), "\n") {
+	for line := range strings.SplitSeq(string(data), "\n") {
 		fields := strings.Fields(strings.TrimSpace(line))
 		if len(fields) < 2 {
 			continue

@@ -68,7 +68,7 @@ func TestDDLFileSource_Load(t *testing.T) {
 		baseType string
 		notNull  bool
 	}{
-		"UserId":    {fieldIdx: 0, name: "UserId", goType: "int64", baseType: "INT64", notNull: true},
+		"UserId":    {fieldIdx: 0, name: "UserID", goType: "int64", baseType: "INT64", notNull: true},
 		"Name":      {fieldIdx: 1, name: "Name", goType: "spanner.NullString", baseType: "STRING", notNull: false},
 		"Email":     {fieldIdx: 2, name: "Email", goType: "string", baseType: "STRING", notNull: true},
 		"Age":       {fieldIdx: 3, name: "Age", goType: "spanner.NullInt64", baseType: "INT64", notNull: false},
@@ -97,8 +97,8 @@ func TestDDLFileSource_Load(t *testing.T) {
 	if len(typ.PrimaryKeyFields) != 1 {
 		t.Fatalf("expected 1 primary key field, got %d", len(typ.PrimaryKeyFields))
 	}
-	if typ.PrimaryKeyFields[0].Name != "UserId" {
-		t.Errorf("primary key field = %q, want %q", typ.PrimaryKeyFields[0].Name, "UserId")
+	if typ.PrimaryKeyFields[0].Name != "UserID" {
+		t.Errorf("primary key field = %q, want %q", typ.PrimaryKeyFields[0].Name, "UserID")
 	}
 }
 
@@ -127,7 +127,7 @@ func TestDDLFileSource_Load_ArrayAndCommitTimestamp(t *testing.T) {
 	got := schema.Types[0]
 	if diff := cmp.Diff([]Field{
 		{
-			Name:            "RunId",
+			Name:            "RunID",
 			ColumnName:      "RunId",
 			GoType:          "int64",
 			SpannerType:     "INT64",
@@ -136,7 +136,7 @@ func TestDDLFileSource_Load_ArrayAndCommitTimestamp(t *testing.T) {
 			IsPrimaryKey:    true,
 		},
 		{
-			Name:            "RepositoryIds",
+			Name:            "RepositoryIDs",
 			ColumnName:      "RepositoryIds",
 			GoType:          "[]string",
 			SpannerType:     "ARRAY<STRING(MAX)>",
@@ -170,11 +170,14 @@ func TestSnakeToCamel(t *testing.T) {
 		input    string
 		expected string
 	}{
-		"simple":        {input: "user_id", expected: "UserId"},
-		"single word":   {input: "name", expected: "Name"},
-		"already camel": {input: "UserID", expected: "UserID"},
-		"empty":         {input: "", expected: ""},
-		"underscores":   {input: "created_at_time", expected: "CreatedAtTime"},
+		"simple":                {input: "user_id", expected: "UserID"},
+		"camel initialism":      {input: "UserId", expected: "UserID"},
+		"single word":           {input: "name", expected: "Name"},
+		"already camel":         {input: "UserID", expected: "UserID"},
+		"plural initialism":     {input: "repository_ids", expected: "RepositoryIDs"},
+		"standalone initialism": {input: "id", expected: "ID"},
+		"empty":                 {input: "", expected: ""},
+		"underscores":           {input: "created_at_time", expected: "CreatedAtTime"},
 	}
 
 	for name, tt := range tests {

@@ -55,3 +55,22 @@ func TestSingularizeIdentifier(t *testing.T) {
 		})
 	}
 }
+
+func TestLowerCamel(t *testing.T) {
+	tests := map[string]string{
+		"":          "",
+		"UserID":    "userID",
+		"ID":        "id",
+		"IDs":       "ids",
+		"URLValue":  "urlValue",
+		"user_name": "userName",
+	}
+
+	for input, want := range tests {
+		t.Run(input, func(t *testing.T) {
+			if got := lowerCamel(input); got != want {
+				t.Fatalf("lowerCamel(%q) = %q, want %q", input, got, want)
+			}
+		})
+	}
+}

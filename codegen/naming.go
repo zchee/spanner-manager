@@ -22,6 +22,51 @@ import (
 
 var defaultPluralizer = pluralize.NewClient()
 
+var commonInitialisms = map[string]struct{}{
+	"ACL":   {},
+	"API":   {},
+	"ASCII": {},
+	"CPU":   {},
+	"CSS":   {},
+	"DB":    {},
+	"DDL":   {},
+	"DML":   {},
+	"DNS":   {},
+	"EOF":   {},
+	"GCP":   {},
+	"GUID":  {},
+	"HTML":  {},
+	"HTTP":  {},
+	"HTTPS": {},
+	"ID":    {},
+	"IP":    {},
+	"JSON":  {},
+	"LHS":   {},
+	"QPS":   {},
+	"RAM":   {},
+	"RHS":   {},
+	"RPC":   {},
+	"SLA":   {},
+	"SMTP":  {},
+	"SQL":   {},
+	"SSH":   {},
+	"TCP":   {},
+	"TLS":   {},
+	"TTL":   {},
+	"UDP":   {},
+	"UI":    {},
+	"UID":   {},
+	"URI":   {},
+	"URL":   {},
+	"UTF8":  {},
+	"UUID":  {},
+	"VM":    {},
+	"XML":   {},
+	"XMPP":  {},
+	"XSRF":  {},
+	"XSS":   {},
+}
+
 func generatedRowName(tableName string, singularizeRows bool, rowSuffix string, inflections []Inflection) string {
 	name := snakeToCamel(tableName)
 	if singularizeRows {
@@ -79,4 +124,110 @@ func matchIdentifierCase(existing, replacement string) string {
 		return strings.ToLower(replacement)
 	}
 	return strings.ToUpper(replacement[:1]) + replacement[1:]
+}
+
+func upperCamelIdentifier(s string) string {
+	var b strings.Builder
+	for part := range strings.SplitSeq(s, "_") {
+		for _, word := range identifierWords(part) {
+			b.WriteString(upperCamelWord(word))
+		}
+	}
+	return b.String()
+}
+
+func lowerCamel(s string) string {
+	var words []string
+	for part := range strings.SplitSeq(s, "_") {
+		words = append(words, identifierWords(part)...)
+	}
+	if len(words) == 0 {
+		return ""
+	}
+
+	var b strings.Builder
+	b.WriteString(lowerCamelWord(words[0]))
+	for _, word := range words[1:] {
+		b.WriteString(upperCamelWord(word))
+	}
+	return b.String()
+}
+
+func identifierWords(s string) []string {
+	if s == "" {
+		return nil
+	}
+
+	words := make([]string, 0, 4)
+	start := 0
+	for i := 1; i < len(s); i++ {
+		prev := s[i-1]
+		curr := s[i]
+		var next byte
+		if i+1 < len(s) {
+			next = s[i+1]
+		}
+
+		if isUpperASCII(curr) && (isLowerASCII(prev) || isDigitASCII(prev)) {
+			words = append(words, s[start:i])
+			start = i
+			continue
+		}
+		if isUpperASCII(prev) && isUpperASCII(curr) && next != 0 && isLowerASCII(next) {
+			if next == 's' && (i+2 == len(s) || isUpperASCII(s[i+2])) {
+				continue
+			}
+			words = append(words, s[start:i])
+			start = i
+		}
+	}
+
+	words = append(words, s[start:])
+	return words
+}
+
+func upperCamelWord(word string) string {
+	if normalized, ok := normalizeInitialismWord(word); ok {
+		return normalized
+	}
+	if word == "" {
+		return word
+	}
+	return strings.ToUpper(word[:1]) + strings.ToLower(word[1:])
+}
+
+func lowerCamelWord(word string) string {
+	if normalized, ok := normalizeInitialismWord(word); ok {
+		return strings.ToLower(normalized)
+	}
+	if word == "" {
+		return word
+	}
+	return strings.ToLower(word[:1]) + word[1:]
+}
+
+func normalizeInitialismWord(word string) (string, bool) {
+	upper := strings.ToUpper(word)
+	if _, ok := commonInitialisms[upper]; ok {
+		return upper, true
+	}
+	if before, ok := strings.CutSuffix(upper, "S"); ok {
+		base := before
+		if _, ok := commonInitialisms[base]; ok {
+			return base + "s", true
+		}
+	}
+	return "", false
+}
+
+func isUpperASCII(b byte) bool {
+	return 'A' <= b && b <= 'Z'
+}
+
+func isLowerASCII(b byte) bool {
+	return 'a' <= b && b <= 'z'
+}
+
+func isDigitASCII(b byte) bool {
+	return '0' <= b && b <= '9'
 }

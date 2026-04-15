@@ -319,14 +319,5 @@ func columnHasTrueOption(options *ast.Options, name string) bool {
 
 // snakeToCamel converts a snake_case string to CamelCase.
 func snakeToCamel(s string) string {
-	parts := strings.Split(s, "_")
-	var b strings.Builder
-	for _, p := range parts {
-		if p == "" {
-			continue
-		}
-		b.WriteString(strings.ToUpper(p[:1]))
-		b.WriteString(p[1:])
-	}
-	return b.String()
+	return upperCamelIdentifier(s)
 }

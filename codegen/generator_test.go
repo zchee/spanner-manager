@@ -32,7 +32,7 @@ func TestGenerator_Generate_BasicFiles(t *testing.T) {
 		Table: "Users",
 		Fields: []Field{
 			{
-				Name:            "UserId",
+				Name:            "UserID",
 				ColumnName:      "user_id",
 				GoType:          "int64",
 				SpannerType:     "INT64",
@@ -81,10 +81,10 @@ func TestGenerator_Generate_BasicFiles(t *testing.T) {
 			path: filepath.Join(outDir, "users.yo.go"),
 			contains: []string{
 				"type Users struct",
-				"UserId int64",
+				"UserID int64",
 				`spanner:"name"`,
 				"func (t *Users) Insert() *spanner.Mutation",
-				"func FindUsersByPrimaryKey(ctx context.Context, db SpannerDB, userId int64) (*Users, error)",
+				"func FindUsersByPrimaryKey(ctx context.Context, db SpannerDB, userID int64) (*Users, error)",
 			},
 		},
 	}
