@@ -1,0 +1,68 @@
+{
+  "cli_version": "dev",
+  "checkpoint_id": "fcb0aac9ef22",
+  "session_id": "019d8e5d-92a2-7e83-b3af-7594f969530e",
+  "strategy": "manual-commit",
+  "created_at": "2026-04-15T01:22:19.837954Z",
+  "branch": "main",
+  "checkpoints_count": 1,
+  "files_touched": [
+    "codegen/generator.go",
+    "codegen/generator_test.go",
+    "go.mod",
+    "go.sum"
+  ],
+  "agent": "Codex",
+  "model": "gpt-5.4",
+  "turn_id": "c10f187e07e3",
+  "token_usage": {
+    "input_tokens": 3815151,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 3404288,
+    "output_tokens": 41509,
+    "api_call_count": 42
+  },
+  "session_metrics": {
+    "turn_count": 1
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-04-15T01:22:19.811097Z",
+    "agent_lines": 118,
+    "agent_removed": 6,
+    "human_added": 0,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 118,
+    "total_lines_changed": 124,
+    "agent_percentage": 100,
+    "metric_version": 2
+  },
+  "prompt_attributions": [
+    {
+      "checkpoint_number": 1,
+      "user_lines_added": 1297,
+      "user_lines_removed": 0,
+      "agent_lines_added": 0,
+      "agent_lines_removed": 0,
+      "user_added_per_file": {
+        ".agent/PLANS.md": 243,
+        ".agents/plans/improve-codegen.md": 204,
+        ".envrc": 1,
+        ".github/workflows/test.yaml": 63,
+        ".omx/logs/notify-fallback-2026-04-14.jsonl": 38,
+        ".omx/logs/omx-2026-04-14.jsonl": 3,
+        ".omx/logs/session-history.jsonl": 1,
+        ".omx/metrics.json": 10,
+        ".omx/state/notify-fallback-authority-owner.json": 6,
+        ".omx/state/notify-fallback-state.json": 88,
+        ".omx/state/notify-fallback.pid": 8,
+        ".omx/state/session.json": 7,
+        ".omx/state/sessions/omx-1776209989987-r6ty07/AGENTS.md": 604,
+        ".omx/state/sessions/omx-1776209989987-r6ty07/hud-state.json": 6,
+        ".omx/state/team-leader-nudge.json": 5,
+        ".omx/state/tmux-extended-keys/private-tmp-tmux-501-default.json": 6,
+        ".omx/state/update-check.json": 4
+      }
+    }
+  ]
+}

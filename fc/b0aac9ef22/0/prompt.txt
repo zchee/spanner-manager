@@ -1,0 +1,5 @@
+$ultrawork "Implements formatting generated code with gofumpt"
+
+---
+
+$ultrawork "Implements formatting generated code with gofumpt package"
