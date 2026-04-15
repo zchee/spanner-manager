@@ -39,11 +39,11 @@
     }
   ],
   "token_usage": {
-    "input_tokens": 6599075,
+    "input_tokens": 7005083,
     "cache_creation_tokens": 0,
-    "cache_read_tokens": 5985792,
-    "output_tokens": 70402,
-    "api_call_count": 81
+    "cache_read_tokens": 6390272,
+    "output_tokens": 71943,
+    "api_call_count": 84
   },
   "combined_attribution": {
     "calculated_at": "2026-04-15T05:43:40.511129Z",
