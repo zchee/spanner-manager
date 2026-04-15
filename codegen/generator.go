@@ -18,12 +18,13 @@ import (
 	"bytes"
 	"embed"
 	"fmt"
-	"go/format"
 	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
 	"text/template"
+
+	gofumptformat "mvdan.cc/gofumpt/format"
 )
 
 const (
@@ -328,11 +329,7 @@ func (g *Generator) writeTemplate(filename, templateName string, data any) error
 
 	// Format Go code.
 	if g.opts.Language == "go" {
-		formatted, err := format.Source(buf.Bytes())
-		if err != nil {
-			// Write unformatted on format error for debugging.
-			formatted = buf.Bytes()
-		}
+		formatted := g.formatGoSource(buf.Bytes())
 		buf.Reset()
 		buf.Write(formatted)
 	}
@@ -343,6 +340,67 @@ func (g *Generator) writeTemplate(filename, templateName string, data any) error
 	}
 
 	return nil
+}
+
+func (g *Generator) formatGoSource(src []byte) []byte {
+	modulePath, langVersion := detectGoModuleConfig(g.opts.OutDir)
+	formatted, err := gofumptformat.Source(src, gofumptformat.Options{
+		ModulePath:  modulePath,
+		LangVersion: langVersion,
+	})
+	if err != nil {
+		// Write unformatted on format error for debugging.
+		return src
+	}
+	return formatted
+}
+
+func detectGoModuleConfig(startDir string) (modulePath, langVersion string) {
+	dir, err := filepath.Abs(startDir)
+	if err != nil {
+		dir = startDir
+	}
+
+	for dir != "" {
+		data, err := os.ReadFile(filepath.Join(dir, "go.mod"))
+		if err == nil {
+			return parseGoModMetadata(data)
+		}
+
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			break
+		}
+		dir = parent
+	}
+
+	return "", ""
+}
+
+func parseGoModMetadata(data []byte) (modulePath, langVersion string) {
+	for _, line := range strings.Split(string(data), "\n") {
+		fields := strings.Fields(strings.TrimSpace(line))
+		if len(fields) < 2 {
+			continue
+		}
+
+		switch fields[0] {
+		case "module":
+			if modulePath == "" {
+				modulePath = strings.Trim(fields[1], "\"")
+			}
+		case "go":
+			if langVersion == "" {
+				langVersion = "go" + fields[1]
+			}
+		}
+
+		if modulePath != "" && langVersion != "" {
+			break
+		}
+	}
+
+	return modulePath, langVersion
 }
 
 func mustSubFS(fsys fs.FS, dir string) fs.FS {
