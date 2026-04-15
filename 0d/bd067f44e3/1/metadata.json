@@ -1,0 +1,46 @@
+{
+  "cli_version": "dev",
+  "checkpoint_id": "0dbd067f44e3",
+  "session_id": "019d8e61-04a6-72e1-8ad1-6066e8b2aa81",
+  "strategy": "manual-commit",
+  "created_at": "2026-04-15T01:22:32.407686Z",
+  "branch": "main",
+  "checkpoints_count": 1,
+  "files_touched": [
+    ".github/workflows/test.yaml"
+  ],
+  "agent": "Codex",
+  "model": "gpt-5.1-codex-mini",
+  "turn_id": "ec2749850e71",
+  "token_usage": {
+    "input_tokens": 1202273,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 793600,
+    "output_tokens": 22994,
+    "api_call_count": 27
+  },
+  "session_metrics": {
+    "turn_count": 1
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-04-15T01:22:32.388534Z",
+    "agent_lines": 63,
+    "agent_removed": 0,
+    "human_added": 0,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 63,
+    "total_lines_changed": 63,
+    "agent_percentage": 100,
+    "metric_version": 2
+  },
+  "prompt_attributions": [
+    {
+      "checkpoint_number": 1,
+      "user_lines_added": 0,
+      "user_lines_removed": 0,
+      "agent_lines_added": 0,
+      "agent_lines_removed": 0
+    }
+  ]
+}
