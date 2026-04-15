@@ -3,7 +3,7 @@
   "checkpoint_id": "0dbd067f44e3",
   "strategy": "manual-commit",
   "branch": "main",
-  "checkpoints_count": 2,
+  "checkpoints_count": 3,
   "files_touched": [
     ".github/workflows/test.yaml"
   ],
@@ -19,13 +19,19 @@
       "transcript": "/0d/bd067f44e3/1/full.jsonl",
       "content_hash": "/0d/bd067f44e3/1/content_hash.txt",
       "prompt": "/0d/bd067f44e3/1/prompt.txt"
+    },
+    {
+      "metadata": "/0d/bd067f44e3/2/metadata.json",
+      "transcript": "/0d/bd067f44e3/2/full.jsonl",
+      "content_hash": "/0d/bd067f44e3/2/content_hash.txt",
+      "prompt": "/0d/bd067f44e3/2/prompt.txt"
     }
   ],
   "token_usage": {
-    "input_tokens": 1966254,
+    "input_tokens": 2635379,
     "cache_creation_tokens": 0,
-    "cache_read_tokens": 1485184,
-    "output_tokens": 33326,
-    "api_call_count": 39
+    "cache_read_tokens": 2020352,
+    "output_tokens": 37685,
+    "api_call_count": 51
   }
 }
