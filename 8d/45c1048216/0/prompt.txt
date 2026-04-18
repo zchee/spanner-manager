@@ -1,0 +1,9 @@
+Do append "Use gopls MCP server" instruction to AGENTS.md
+
+---
+
+Do append "Use gopls, gemini-google-search and google-developer-knowledge MCP server" instruction to AGENTS.md
+
+---
+
+Check can ues google-developer-knowledge MCP server
