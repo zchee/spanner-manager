@@ -1,0 +1,89 @@
+{
+  "cli_version": "dev",
+  "checkpoint_id": "8d45c1048216",
+  "session_id": "019d9fc9-57a4-7f73-88a2-ecb1e4229a6b",
+  "strategy": "manual-commit",
+  "created_at": "2026-04-18T08:54:13.439262Z",
+  "branch": "main",
+  "checkpoints_count": 3,
+  "files_touched": [
+    "AGENTS.md"
+  ],
+  "agent": "Codex",
+  "model": "gpt-5.4",
+  "turn_id": "746dba48b4c2",
+  "token_usage": {
+    "input_tokens": 350978,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 295808,
+    "output_tokens": 3248,
+    "api_call_count": 7
+  },
+  "session_metrics": {
+    "turn_count": 3
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-04-18T08:54:13.425362Z",
+    "agent_lines": 0,
+    "agent_removed": 0,
+    "human_added": 0,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 0,
+    "total_lines_changed": 0,
+    "agent_percentage": 0,
+    "metric_version": 2
+  },
+  "prompt_attributions": [
+    {
+      "checkpoint_number": 1,
+      "user_lines_added": 455,
+      "user_lines_removed": 0,
+      "agent_lines_added": 0,
+      "agent_lines_removed": 0,
+      "user_added_per_file": {
+        ".agent/PLANS.md": 243,
+        ".agents/plans/improve-codegen.md": 204,
+        ".codex/config.toml": 6,
+        ".envrc": 1,
+        "AGENTS.md": 1
+      }
+    },
+    {
+      "checkpoint_number": 2,
+      "user_lines_added": 448,
+      "user_lines_removed": 0,
+      "agent_lines_added": 7,
+      "agent_lines_removed": 0,
+      "user_added_per_file": {
+        ".agent/PLANS.md": 243,
+        ".agents/plans/improve-codegen.md": 204,
+        ".envrc": 1
+      }
+    },
+    {
+      "checkpoint_number": 3,
+      "user_lines_added": 448,
+      "user_lines_removed": 0,
+      "agent_lines_added": 7,
+      "agent_lines_removed": 0,
+      "user_added_per_file": {
+        ".agent/PLANS.md": 243,
+        ".agents/plans/improve-codegen.md": 204,
+        ".envrc": 1
+      }
+    },
+    {
+      "checkpoint_number": 4,
+      "user_lines_added": 448,
+      "user_lines_removed": 0,
+      "agent_lines_added": 7,
+      "agent_lines_removed": 0,
+      "user_added_per_file": {
+        ".agent/PLANS.md": 243,
+        ".agents/plans/improve-codegen.md": 204,
+        ".envrc": 1
+      }
+    }
+  ]
+}
