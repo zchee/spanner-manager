@@ -1,0 +1,25 @@
+{
+  "cli_version": "dev",
+  "checkpoint_id": "7576cd86bee1",
+  "strategy": "manual-commit",
+  "checkpoints_count": 0,
+  "files_touched": [
+    "codegen/generator_test.go",
+    "docs/index-metadata-parity-review.md"
+  ],
+  "sessions": [
+    {
+      "metadata": "/75/76cd86bee1/0/metadata.json",
+      "transcript": "/75/76cd86bee1/0/full.jsonl",
+      "content_hash": "/75/76cd86bee1/0/content_hash.txt",
+      "prompt": ""
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 571768,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 568832,
+    "output_tokens": 2834,
+    "api_call_count": 6
+  }
+}
