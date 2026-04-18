@@ -20,6 +20,7 @@ import (
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
+	"github.com/zchee/spanner-manager/sqlutil"
 )
 
 func TestDDLFileSource_Load(t *testing.T) {
@@ -162,6 +163,115 @@ func TestDDLFileSource_Load_ArrayAndCommitTimestamp(t *testing.T) {
 	}
 	if diff := cmp.Diff([]Field{got.Fields[2]}, got.CommitTSFields); diff != "" {
 		t.Fatalf("commit timestamp fields mismatch (-want +got):\n%s", diff)
+	}
+}
+
+func TestDDLFileSource_Load_IndexMetadata(t *testing.T) {
+	ddl := `CREATE TABLE Users (
+		UserId INT64 NOT NULL,
+		Email STRING(256) NOT NULL,
+		CreatedAt TIMESTAMP NOT NULL,
+		Name STRING(MAX),
+	) PRIMARY KEY (UserId);
+	CREATE UNIQUE INDEX UsersByEmail ON Users(Email, CreatedAt) STORING (Name)`
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, "schema.sql")
+	if err := os.WriteFile(path, []byte(ddl), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	source := NewDDLFileSource(path)
+	schema, err := source.Load(t.Context())
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if len(schema.Types) != 1 {
+		t.Fatalf("expected 1 type, got %d", len(schema.Types))
+	}
+
+	got := schema.Types[0].Indexes
+	want := []IndexInfo{
+		{
+			Name:     "UsersByEmail",
+			FuncName: "UsersByEmail",
+			Fields: []Field{
+				schema.Types[0].Fields[1],
+				schema.Types[0].Fields[2],
+			},
+			IsUnique: true,
+		},
+	}
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Fatalf("indexes mismatch (-want +got):\n%s", diff)
+	}
+	if len(got[0].Fields) != 2 {
+		t.Fatalf("index field count = %d, want 2", len(got[0].Fields))
+	}
+	if got[0].Fields[0].Name != "Email" || got[0].Fields[1].Name != "CreatedAt" {
+		t.Fatalf("index fields = %#v, want Email, CreatedAt", got[0].Fields)
+	}
+	if got[0].Fields[0].GoType != "string" || got[0].Fields[1].GoType != "time.Time" {
+		t.Fatalf("index field GoTypes = [%q, %q], want [string, time.Time]", got[0].Fields[0].GoType, got[0].Fields[1].GoType)
+	}
+	if len(got[0].Fields[0].Imports) != 0 || len(got[0].Fields[1].Imports) != 1 || got[0].Fields[1].Imports[0].Path != "time" {
+		t.Fatalf("index field imports = %#v, want Email no imports and CreatedAt time import", got[0].Fields)
+	}
+	if got[0].Fields[0].ColumnName != "Email" || got[0].Fields[1].ColumnName != "CreatedAt" {
+		t.Fatalf("index field column names = [%q, %q], want [Email, CreatedAt]", got[0].Fields[0].ColumnName, got[0].Fields[1].ColumnName)
+	}
+	if got[0].Fields[0].NotNull != true || got[0].Fields[1].NotNull != true {
+		t.Fatalf("index field not-null flags = [%v, %v], want [true, true]", got[0].Fields[0].NotNull, got[0].Fields[1].NotNull)
+	}
+	if got[0].Fields[0].SpannerType != "STRING(256)" || got[0].Fields[1].SpannerType != "TIMESTAMP" {
+		t.Fatalf("index field SpannerTypes = [%q, %q], want [STRING(256), TIMESTAMP]", got[0].Fields[0].SpannerType, got[0].Fields[1].SpannerType)
+	}
+	if got[0].Fields[0].BaseSpannerType != "STRING" || got[0].Fields[1].BaseSpannerType != "TIMESTAMP" {
+		t.Fatalf("index field base types = [%q, %q], want [STRING, TIMESTAMP]", got[0].Fields[0].BaseSpannerType, got[0].Fields[1].BaseSpannerType)
+	}
+	if got[0].Fields[0].IsPrimaryKey || got[0].Fields[1].IsPrimaryKey {
+		t.Fatalf("index fields primary key flags = [%v, %v], want [false, false]", got[0].Fields[0].IsPrimaryKey, got[0].Fields[1].IsPrimaryKey)
+	}
+	if got[0].Fields[0].AllowCommitTimestamp || got[0].Fields[1].AllowCommitTimestamp {
+		t.Fatalf("index fields allow commit timestamp flags = [%v, %v], want [false, false]", got[0].Fields[0].AllowCommitTimestamp, got[0].Fields[1].AllowCommitTimestamp)
+	}
+}
+
+func TestBuildIndexInfos(t *testing.T) {
+	ddls, err := sqlutil.ParseDDLs(`CREATE TABLE Users (
+		UserId INT64 NOT NULL,
+		Email STRING(256) NOT NULL,
+		CreatedAt TIMESTAMP NOT NULL,
+	) PRIMARY KEY (UserId);
+	CREATE INDEX UsersByCreatedAt ON Users(CreatedAt);
+	CREATE UNIQUE INDEX UsersByEmail ON Users(Email)`)
+	if err != nil {
+		t.Fatalf("ParseDDLs() error = %v", err)
+	}
+
+	tableFields := []Field{
+		{Name: "UserID", ColumnName: "UserId", GoType: "int64", SpannerType: "INT64", BaseSpannerType: "INT64", NotNull: true, IsPrimaryKey: true},
+		{Name: "Email", ColumnName: "Email", GoType: "string", SpannerType: "STRING(256)", BaseSpannerType: "STRING", NotNull: true},
+		{Name: "CreatedAt", ColumnName: "CreatedAt", GoType: "time.Time", SpannerType: "TIMESTAMP", BaseSpannerType: "TIMESTAMP", NotNull: true, Imports: []ImportSpec{{Path: "time"}}},
+	}
+
+	got := buildIndexInfos(createIndexDDLsByTable(ddls)["Users"], tableFields)
+	want := []IndexInfo{
+		{
+			Name:     "UsersByCreatedAt",
+			FuncName: "UsersByCreatedAt",
+			Fields:   []Field{tableFields[2]},
+			IsUnique: false,
+		},
+		{
+			Name:     "UsersByEmail",
+			FuncName: "UsersByEmail",
+			Fields:   []Field{tableFields[1]},
+			IsUnique: true,
+		},
+	}
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Fatalf("buildIndexInfos() mismatch (-want +got):\n%s", diff)
 	}
 }
 

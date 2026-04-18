@@ -276,6 +276,8 @@ spanner-manager generate --from-ddl schema.sql -o ./models \
 
 Generation writes a shared header file, a shared `spanner_db` helper, and one file per table into the output directory. This is useful when you want generated models checked into the repository.
 
+Live-database and `--from-ddl` generation use the same public codegen surface. Secondary indexes are loaded as schema metadata from both sources for parity, but generation still emits only CRUD methods, commit timestamp helpers, and `FindByPrimaryKey`; it does not add index-specific helpers or query-builder APIs.
+
 | Flag | Description |
 |---|---|
 | `-o, --out` | Output directory (required) |

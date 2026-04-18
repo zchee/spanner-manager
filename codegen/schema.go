@@ -55,8 +55,17 @@ type Field struct {
 
 // IndexInfo represents an index for code generation.
 type IndexInfo struct {
-	Name     string
-	FuncName string
-	Fields   []Field
-	IsUnique bool
+	Name           string
+	FuncName       string
+	Fields         []Field
+	KeyColumns     []IndexKeyColumn
+	StoringColumns []string
+	IsUnique       bool
+}
+
+// IndexKeyColumn represents an ordered key column in an index definition.
+type IndexKeyColumn struct {
+	ColumnName      string
+	OrdinalPosition int64
+	Desc            bool
 }

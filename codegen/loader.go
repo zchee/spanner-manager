@@ -18,6 +18,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"sort"
 	"strings"
 
 	"cloud.google.com/go/spanner"
@@ -51,11 +52,18 @@ func (s *InformationSchemaSource) Load(ctx context.Context) (*Schema, error) {
 	if err != nil {
 		return nil, err
 	}
+	indexDDLsByTable, err := s.loadIndexDDLsByTable(ctx)
+	if err != nil {
+		indexDDLsByTable = nil
+	}
 
 	for _, tableName := range tables {
 		t, err := s.loadType(ctx, tableName)
 		if err != nil {
 			return nil, fmt.Errorf("loading table %s: %w", tableName, err)
+		}
+		if indexDDLs := indexDDLsByTable[tableName]; len(indexDDLs) > 0 {
+			t.Indexes = buildIndexInfos(indexDDLs, t.Fields)
 		}
 		schema.Types = append(schema.Types, *t)
 	}
@@ -165,6 +173,11 @@ func (s *InformationSchemaSource) loadType(ctx context.Context, tableName string
 		}
 	}
 
+	indexKeyColumns, indexStoringColumns, err := s.loadIndexMetadata(ctx, tableName)
+	if err != nil {
+		return nil, fmt.Errorf("querying index columns: %w", err)
+	}
+
 	// Query indexes.
 	idxIter := s.client.Single().Query(ctx, spanner.Statement{
 		SQL: `SELECT INDEX_NAME, IS_UNIQUE
@@ -180,11 +193,11 @@ func (s *InformationSchemaSource) loadType(ctx context.Context, tableName string
 		if err := row.Columns(&name, &isUnique); err != nil {
 			return err
 		}
-		t.Indexes = append(t.Indexes, IndexInfo{
-			Name:     name,
-			FuncName: snakeToCamel(name),
-			IsUnique: isUnique,
-		})
+		idx, err := buildIndexInfo(name, isUnique, indexKeyColumns[name], indexStoringColumns[name], t.Fields)
+		if err != nil {
+			return err
+		}
+		t.Indexes = append(t.Indexes, idx)
 		return nil
 	}); err != nil {
 		return nil, fmt.Errorf("querying indexes: %w", err)
@@ -219,6 +232,18 @@ func (s *InformationSchemaSource) loadCommitTimestampColumns(ctx context.Context
 	return columns, nil
 }
 
+func (s *InformationSchemaSource) loadIndexDDLsByTable(ctx context.Context) (map[string][]*ast.CreateIndex, error) {
+	ddlStatements, err := s.client.GetDatabaseDDL(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("getting database DDL for index metadata: %w", err)
+	}
+	ddls, err := sqlutil.ParseDDLs(strings.Join(ddlStatements, ";\n"))
+	if err != nil {
+		return nil, fmt.Errorf("parsing database DDL for index metadata: %w", err)
+	}
+	return createIndexDDLsByTable(ddls), nil
+}
+
 // DDLFileSource loads schema from a DDL file using memefish.
 type DDLFileSource struct {
 	path string
@@ -242,6 +267,7 @@ func (s *DDLFileSource) Load(_ context.Context) (*Schema, error) {
 	}
 
 	schema := &Schema{}
+	typeIndexByTable := make(map[string]int)
 	for _, ddl := range ddls {
 		ct, ok := ddl.(*ast.CreateTable)
 		if !ok {
@@ -289,10 +315,105 @@ func (s *DDLFileSource) Load(_ context.Context) (*Schema, error) {
 		}
 
 		refreshTypeMetadata(t)
+		typeIndexByTable[t.Table] = len(schema.Types)
 		schema.Types = append(schema.Types, *t)
+		tableIndexes[t.Table] = len(schema.Types) - 1
+	}
+
+	for _, ddl := range ddls {
+		ci, ok := ddl.(*ast.CreateIndex)
+		if !ok {
+			continue
+		}
+
+		tableName := pathName(ci.TableName)
+		indexPos, ok := tableIndexes[tableName]
+		if !ok {
+			return nil, fmt.Errorf("index %s references unknown table %s", pathName(ci.Name), tableName)
+		}
+
+		idx, err := buildIndexInfoFromDDL(&schema.Types[indexPos], ci)
+		if err != nil {
+			return nil, err
+		}
+		schema.Types[indexPos].Indexes = append(schema.Types[indexPos].Indexes, idx)
+	}
+
+	for tableName, indexDDLs := range createIndexDDLsByTable(ddls) {
+		typeIndex, ok := typeIndexByTable[tableName]
+		if !ok {
+			continue
+		}
+		schema.Types[typeIndex].Indexes = buildIndexInfos(indexDDLs, schema.Types[typeIndex].Fields)
+	}
+
+	for tableName, indexDDLs := range createIndexDDLsByTable(ddls) {
+		typeIndex, ok := typeIndexByTable[tableName]
+		if !ok {
+			continue
+		}
+		schema.Types[typeIndex].Indexes = buildIndexInfos(indexDDLs, schema.Types[typeIndex].Fields)
 	}
 
 	return schema, nil
+}
+
+func buildIndexInfoFromDDL(t *Type, stmt *ast.CreateIndex) (IndexInfo, error) {
+	keyColumns := make([]IndexKeyColumn, 0, len(stmt.Keys))
+	for i, key := range stmt.Keys {
+		keyColumns = append(keyColumns, IndexKeyColumn{
+			ColumnName:      key.Name.Name,
+			OrdinalPosition: int64(i + 1),
+			Desc:            key.Dir == ast.DirectionDesc,
+		})
+	}
+
+	storingColumns := make([]string, 0)
+	if stmt.Storing != nil {
+		storingColumns = make([]string, 0, len(stmt.Storing.Columns))
+		for _, col := range stmt.Storing.Columns {
+			storingColumns = append(storingColumns, col.Name)
+		}
+	}
+
+	return buildIndexInfo(pathName(stmt.Name), stmt.Unique, keyColumns, storingColumns, t.Fields)
+}
+
+func buildIndexInfo(name string, isUnique bool, keyColumns []IndexKeyColumn, storingColumns []string, tableFields []Field) (IndexInfo, error) {
+	fields, err := fieldsForIndexColumns(tableFields, keyColumns)
+	if err != nil {
+		return IndexInfo{}, fmt.Errorf("building index %s metadata: %w", name, err)
+	}
+	if len(keyColumns) == 0 {
+		return IndexInfo{}, fmt.Errorf("building index %s metadata: missing key columns", name)
+	}
+
+	return IndexInfo{
+		Name:           name,
+		FuncName:       snakeToCamel(name),
+		Fields:         fields,
+		KeyColumns:     append([]IndexKeyColumn(nil), keyColumns...),
+		StoringColumns: append([]string(nil), storingColumns...),
+		IsUnique:       isUnique,
+	}, nil
+}
+
+func fieldsForIndexColumns(tableFields []Field, keyColumns []IndexKeyColumn) ([]Field, error) {
+	fieldByColumn := make(map[string]Field, len(tableFields))
+	for _, field := range tableFields {
+		fieldByColumn[field.ColumnName] = field
+	}
+
+	fields := make([]Field, 0, len(keyColumns))
+	for _, keyColumn := range keyColumns {
+		field, ok := fieldByColumn[keyColumn.ColumnName]
+		if !ok {
+			return nil, fmt.Errorf("column %q not found", keyColumn.ColumnName)
+		}
+		fields = append(fields, field)
+	}
+
+	return fields, nil
 }
 
 // pathName extracts the simple name from a memefish Path (last identifier).
@@ -315,6 +436,50 @@ func columnHasTrueOption(options *ast.Options, name string) bool {
 		return ok && lit.Value
 	}
 	return false
+}
+
+func createIndexDDLsByTable(ddls []ast.DDL) map[string][]*ast.CreateIndex {
+	indexDDLsByTable := make(map[string][]*ast.CreateIndex)
+	for _, ddl := range ddls {
+		createIndex, ok := ddl.(*ast.CreateIndex)
+		if !ok {
+			continue
+		}
+		tableName := pathName(createIndex.TableName)
+		indexDDLsByTable[tableName] = append(indexDDLsByTable[tableName], createIndex)
+	}
+	return indexDDLsByTable
+}
+
+func buildIndexInfos(indexDDLs []*ast.CreateIndex, tableFields []Field) []IndexInfo {
+	indexInfos := make([]IndexInfo, 0, len(indexDDLs))
+	for _, indexDDL := range indexDDLs {
+		indexInfo := IndexInfo{
+			Name:     pathName(indexDDL.Name),
+			FuncName: snakeToCamel(pathName(indexDDL.Name)),
+			IsUnique: indexDDL.Unique,
+		}
+		for _, key := range indexDDL.Keys {
+			indexInfo.Fields = append(indexInfo.Fields, fieldForIndexColumn(tableFields, key.Name.Name))
+		}
+		indexInfos = append(indexInfos, indexInfo)
+	}
+	sort.Slice(indexInfos, func(i, j int) bool {
+		return indexInfos[i].Name < indexInfos[j].Name
+	})
+	return indexInfos
+}
+
+func fieldForIndexColumn(tableFields []Field, columnName string) Field {
+	for _, field := range tableFields {
+		if field.ColumnName == columnName {
+			return field
+		}
+	}
+	return Field{
+		Name:       snakeToCamel(columnName),
+		ColumnName: columnName,
+	}
 }
 
 // snakeToCamel converts a snake_case string to CamelCase.

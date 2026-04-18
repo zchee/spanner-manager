@@ -101,6 +101,67 @@ func TestGenerator_Generate_BasicFiles(t *testing.T) {
 	}
 }
 
+func TestGenerator_Generate_IndexMetadataDoesNotExpandAPISurface(t *testing.T) {
+	root := newCompileFixtureRoot(t)
+	outDir := generateFromDDL(t, root, `CREATE TABLE Users (
+		UserId INT64 NOT NULL,
+		Email STRING(256),
+		CreatedAt TIMESTAMP NOT NULL,
+		DisplayName STRING(MAX),
+	) PRIMARY KEY (UserId);
+	CREATE INDEX UsersByCreatedAt ON Users(CreatedAt DESC) STORING (DisplayName);
+	CREATE UNIQUE INDEX UsersByEmail ON Users(Email)`, Options{
+		PackageName: "models",
+	})
+
+	if diff := cmp.Diff([]string{
+		"spanner_db.spanner.go",
+		"spanner_header.spanner.go",
+		"users.spanner.go",
+	}, listFiles(t, outDir)); diff != "" {
+		t.Fatalf("generated files mismatch (-want +got):\n%s", diff)
+	}
+
+	helperContent := readTextFile(t, filepath.Join(outDir, "spanner_db.spanner.go"))
+	for name, want := range map[string]string{
+		"read row": "ReadRow(",
+		"query":    "Query(",
+	} {
+		if !strings.Contains(helperContent, want) {
+			t.Fatalf("spanner_db.spanner.go missing %s method %q", name, want)
+		}
+	}
+	for name, unwanted := range map[string]string{
+		"read using index": "ReadUsingIndex(",
+		"query by index":   "QueryByIndex(",
+	} {
+		if strings.Contains(helperContent, unwanted) {
+			t.Fatalf("spanner_db.spanner.go unexpectedly contains %s method %q", name, unwanted)
+		}
+	}
+
+	typeContent := readTextFile(t, filepath.Join(outDir, "users.spanner.go"))
+	for name, want := range map[string]string{
+		"primary key finder": "func FindUsersByPrimaryKey(ctx context.Context, db SpannerDB, userID int64) (*Users, error)",
+		"insert mutation":    "func (t *Users) Insert() *spanner.Mutation",
+	} {
+		if !strings.Contains(typeContent, want) {
+			t.Fatalf("users.spanner.go missing %s %q", name, want)
+		}
+	}
+	for name, unwanted := range map[string]string{
+		"secondary index finder": "FindUsersByCreatedAt",
+		"unique index finder":    "FindUsersByEmail",
+		"query builder":          "QueryUsersBy",
+	} {
+		if strings.Contains(typeContent, unwanted) {
+			t.Fatalf("users.spanner.go unexpectedly contains %s %q", name, unwanted)
+		}
+	}
+
+	runGoTestDir(t, outDir)
+}
+
 func TestGenerator_Generate_TableSelection(t *testing.T) {
 	tests := map[string]struct {
 		opts      Options
@@ -331,6 +392,80 @@ func TestGenerator_Generate_CommitTimestampHelpers(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestGenerator_Generate_IndexMetadataDoesNotExpandAPI(t *testing.T) {
+	ddl := `CREATE TABLE Users (
+		user_id INT64 NOT NULL,
+		email STRING(256),
+		created_at TIMESTAMP NOT NULL,
+		name STRING(MAX),
+	) PRIMARY KEY (user_id);
+	CREATE UNIQUE INDEX UsersByEmail ON Users(email);
+	CREATE INDEX UsersByCreatedAt ON Users(created_at DESC) STORING (name)`
+
+	root := newCompileFixtureRoot(t)
+	outDir := generateFromDDL(t, root, ddl, Options{PackageName: "models"})
+
+	if diff := cmp.Diff([]string{
+		"spanner_db.spanner.go",
+		"spanner_header.spanner.go",
+		"users.spanner.go",
+	}, listFiles(t, outDir)); diff != "" {
+		t.Fatalf("generated files mismatch (-want +got):\n%s", diff)
+	}
+
+	tests := map[string]struct {
+		path        string
+		contains    []string
+		notContains []string
+	}{
+		"shared db helper remains query-first": {
+			path: filepath.Join(outDir, "spanner_db.spanner.go"),
+			contains: []string{
+				"ReadRow(ctx context.Context, table string, key spanner.Key, columns []string) (*spanner.Row, error)",
+				"Query(ctx context.Context, statement spanner.Statement) *spanner.RowIterator",
+			},
+			notContains: []string{
+				"ReadUsingIndex(",
+			},
+		},
+		"type surface remains CRUD plus primary-key lookup": {
+			path: filepath.Join(outDir, "users.spanner.go"),
+			contains: []string{
+				"func (t *Users) Insert() *spanner.Mutation",
+				"func (t *Users) Update() *spanner.Mutation",
+				"func (t *Users) InsertOrUpdate() *spanner.Mutation",
+				"func (t *Users) Delete() *spanner.Mutation",
+				"func FindUsersByPrimaryKey(ctx context.Context, db SpannerDB, userID int64) (*Users, error)",
+			},
+			notContains: []string{
+				"FindUsersByEmail(",
+				"FindUsersByCreatedAt(",
+				"ListUsersByEmail(",
+				"ListUsersByCreatedAt(",
+				"QueryBuilder",
+			},
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			content := readTextFile(t, tt.path)
+			for _, want := range tt.contains {
+				if !strings.Contains(content, want) {
+					t.Fatalf("%s missing %q", tt.path, want)
+				}
+			}
+			for _, unwanted := range tt.notContains {
+				if strings.Contains(content, unwanted) {
+					t.Fatalf("%s unexpectedly contains %q", tt.path, unwanted)
+				}
+			}
+		})
+	}
+
+	runGoTestDir(t, outDir)
 }
 
 func TestGenerator_Generate_CompileGeneratedOutput(t *testing.T) {
