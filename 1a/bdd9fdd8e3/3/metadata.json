@@ -1,0 +1,53 @@
+{
+  "cli_version": "dev",
+  "checkpoint_id": "1abdd9fdd8e3",
+  "session_id": "019d9ff3-2592-7653-9d1c-cb2b3c3744aa",
+  "strategy": "manual-commit",
+  "created_at": "2026-04-18T10:33:37.794757Z",
+  "branch": "optimize",
+  "checkpoints_count": 0,
+  "files_touched": [
+    "README.md",
+    "codegen/generator_test.go",
+    "codegen/loader.go",
+    "codegen/loader_test.go",
+    "codegen/schema.go",
+    "docs/index-metadata-parity-review.md"
+  ],
+  "agent": "Codex",
+  "model": "gpt-5.4",
+  "turn_id": "a834fdc3c0db",
+  "token_usage": {
+    "input_tokens": 45705,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 6656,
+    "output_tokens": 1204,
+    "api_call_count": 1
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-04-18T10:33:37.787225Z",
+    "agent_lines": 548,
+    "agent_removed": 9,
+    "human_added": 0,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 548,
+    "total_lines_changed": 557,
+    "agent_percentage": 100,
+    "metric_version": 2
+  },
+  "prompt_attributions": [
+    {
+      "checkpoint_number": 1,
+      "user_lines_added": 448,
+      "user_lines_removed": 0,
+      "agent_lines_added": 0,
+      "agent_lines_removed": 0,
+      "user_added_per_file": {
+        ".agent/PLANS.md": 243,
+        ".agents/plans/improve-codegen.md": 204,
+        ".envrc": 1
+      }
+    }
+  ]
+}
