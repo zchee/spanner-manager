@@ -35,6 +35,7 @@ Keep runtime marker contracts stable and non-destructive when overlays are appli
 - Prefer evidence over assumption; verify before claiming completion.
 - Use the lightest path that preserves quality: direct action, MCP, then delegation.
 - Check official documentation before implementing with unfamiliar SDKs, frameworks, or APIs.
+- Use gopls, gemini-google-search and google-developer-knowledge MCP servers when those capabilities are relevant.
 - Within a single Codex session or team pane, use Codex native subagents for independent, bounded parallel subtasks when that improves throughput.
 <!-- OMX:GUIDANCE:OPERATING:START -->
 - Default to quality-first, intent-deepening responses; think one more step before replying or asking for clarification, and use as much detail as needed for a strong result without empty verbosity.
