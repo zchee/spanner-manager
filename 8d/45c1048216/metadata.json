@@ -3,7 +3,7 @@
   "checkpoint_id": "8d45c1048216",
   "strategy": "manual-commit",
   "branch": "main",
-  "checkpoints_count": 6,
+  "checkpoints_count": 4,
   "files_touched": [
     "AGENTS.md"
   ],
