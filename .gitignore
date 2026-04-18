@@ -3,6 +3,17 @@
 #  please consider a global .gitignore https://docs.github.com/en/get-started/git-basics/ignoring-files.
 #  PLEASE DO NOT open a pull request to add something created by your editor or tools
 
+# omx
+.omx/
+.codex/*
+!.codex/agents/
+!.codex/agents/**
+!.codex/skills/
+!.codex/skills/**
+.codex/skills/.system/**
+!.codex/prompts/
+!.codex/prompts/**
+
 # github/gitignore/Go
 #
 # Binaries for programs and plugins
