@@ -244,6 +244,39 @@ func (s *InformationSchemaSource) loadIndexDDLsByTable(ctx context.Context) (map
 	return createIndexDDLsByTable(ddls), nil
 }
 
+func (s *InformationSchemaSource) loadIndexMetadata(ctx context.Context, tableName string) (map[string][]IndexKeyColumn, map[string][]string, error) {
+	indexDDLsByTable, err := s.loadIndexDDLsByTable(ctx)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	keyColumnsByIndex := make(map[string][]IndexKeyColumn)
+	storingColumnsByIndex := make(map[string][]string)
+	for _, indexDDL := range indexDDLsByTable[tableName] {
+		indexName := pathName(indexDDL.Name)
+		keyColumns := make([]IndexKeyColumn, 0, len(indexDDL.Keys))
+		for i, key := range indexDDL.Keys {
+			keyColumns = append(keyColumns, IndexKeyColumn{
+				ColumnName:      key.Name.Name,
+				OrdinalPosition: int64(i + 1),
+				Desc:            key.Dir == ast.DirectionDesc,
+			})
+		}
+		keyColumnsByIndex[indexName] = keyColumns
+
+		if indexDDL.Storing == nil {
+			continue
+		}
+		storingColumns := make([]string, 0, len(indexDDL.Storing.Columns))
+		for _, col := range indexDDL.Storing.Columns {
+			storingColumns = append(storingColumns, col.Name)
+		}
+		storingColumnsByIndex[indexName] = storingColumns
+	}
+
+	return keyColumnsByIndex, storingColumnsByIndex, nil
+}
+
 // DDLFileSource loads schema from a DDL file using memefish.
 type DDLFileSource struct {
 	path string
@@ -314,48 +347,20 @@ func (s *DDLFileSource) Load(_ context.Context) (*Schema, error) {
 			}
 		}
 
-		refreshTypeMetadata(t)
-		typeIndexByTable[t.Table] = len(schema.Types)
-		schema.Types = append(schema.Types, *t)
-		tableIndexes[t.Table] = len(schema.Types) - 1
-	}
-
-	for _, ddl := range ddls {
-		ci, ok := ddl.(*ast.CreateIndex)
-		if !ok {
-			continue
+			refreshTypeMetadata(t)
+			typeIndexByTable[t.Table] = len(schema.Types)
+			schema.Types = append(schema.Types, *t)
 		}
 
-		tableName := pathName(ci.TableName)
-		indexPos, ok := tableIndexes[tableName]
-		if !ok {
-			return nil, fmt.Errorf("index %s references unknown table %s", pathName(ci.Name), tableName)
+		for tableName, indexDDLs := range createIndexDDLsByTable(ddls) {
+			typeIndex, ok := typeIndexByTable[tableName]
+			if !ok {
+				continue
+			}
+			schema.Types[typeIndex].Indexes = buildIndexInfos(indexDDLs, schema.Types[typeIndex].Fields)
 		}
 
-		idx, err := buildIndexInfoFromDDL(&schema.Types[indexPos], ci)
-		if err != nil {
-			return nil, err
-		}
-		schema.Types[indexPos].Indexes = append(schema.Types[indexPos].Indexes, idx)
-	}
-
-	for tableName, indexDDLs := range createIndexDDLsByTable(ddls) {
-		typeIndex, ok := typeIndexByTable[tableName]
-		if !ok {
-			continue
-		}
-		schema.Types[typeIndex].Indexes = buildIndexInfos(indexDDLs, schema.Types[typeIndex].Fields)
-	}
-
-	for tableName, indexDDLs := range createIndexDDLsByTable(ddls) {
-		typeIndex, ok := typeIndexByTable[tableName]
-		if !ok {
-			continue
-		}
-		schema.Types[typeIndex].Indexes = buildIndexInfos(indexDDLs, schema.Types[typeIndex].Fields)
-	}
-
-	return schema, nil
+		return schema, nil
 }
 
 func buildIndexInfoFromDDL(t *Type, stmt *ast.CreateIndex) (IndexInfo, error) {
@@ -454,13 +459,16 @@ func createIndexDDLsByTable(ddls []ast.DDL) map[string][]*ast.CreateIndex {
 func buildIndexInfos(indexDDLs []*ast.CreateIndex, tableFields []Field) []IndexInfo {
 	indexInfos := make([]IndexInfo, 0, len(indexDDLs))
 	for _, indexDDL := range indexDDLs {
-		indexInfo := IndexInfo{
-			Name:     pathName(indexDDL.Name),
-			FuncName: snakeToCamel(pathName(indexDDL.Name)),
-			IsUnique: indexDDL.Unique,
-		}
-		for _, key := range indexDDL.Keys {
-			indexInfo.Fields = append(indexInfo.Fields, fieldForIndexColumn(tableFields, key.Name.Name))
+		indexInfo, err := buildIndexInfoFromDDL(&Type{Fields: tableFields}, indexDDL)
+		if err != nil {
+			indexInfo = IndexInfo{
+				Name:     pathName(indexDDL.Name),
+				FuncName: snakeToCamel(pathName(indexDDL.Name)),
+				IsUnique: indexDDL.Unique,
+			}
+			for _, key := range indexDDL.Keys {
+				indexInfo.Fields = append(indexInfo.Fields, fieldForIndexColumn(tableFields, key.Name.Name))
+			}
 		}
 		indexInfos = append(indexInfos, indexInfo)
 	}

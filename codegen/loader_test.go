@@ -199,6 +199,11 @@ func TestDDLFileSource_Load_IndexMetadata(t *testing.T) {
 				schema.Types[0].Fields[1],
 				schema.Types[0].Fields[2],
 			},
+			KeyColumns: []IndexKeyColumn{
+				{ColumnName: "Email", OrdinalPosition: 1},
+				{ColumnName: "CreatedAt", OrdinalPosition: 2},
+			},
+			StoringColumns: []string{"Name"},
 			IsUnique: true,
 		},
 	}
@@ -258,16 +263,18 @@ func TestBuildIndexInfos(t *testing.T) {
 	got := buildIndexInfos(createIndexDDLsByTable(ddls)["Users"], tableFields)
 	want := []IndexInfo{
 		{
-			Name:     "UsersByCreatedAt",
-			FuncName: "UsersByCreatedAt",
-			Fields:   []Field{tableFields[2]},
-			IsUnique: false,
+			Name:       "UsersByCreatedAt",
+			FuncName:   "UsersByCreatedAt",
+			Fields:     []Field{tableFields[2]},
+			KeyColumns: []IndexKeyColumn{{ColumnName: "CreatedAt", OrdinalPosition: 1}},
+			IsUnique:   false,
 		},
 		{
-			Name:     "UsersByEmail",
-			FuncName: "UsersByEmail",
-			Fields:   []Field{tableFields[1]},
-			IsUnique: true,
+			Name:       "UsersByEmail",
+			FuncName:   "UsersByEmail",
+			Fields:     []Field{tableFields[1]},
+			KeyColumns: []IndexKeyColumn{{ColumnName: "Email", OrdinalPosition: 1}},
+			IsUnique:   true,
 		},
 	}
 	if diff := cmp.Diff(want, got); diff != "" {
