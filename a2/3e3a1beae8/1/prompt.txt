@@ -1,97 +1,43 @@
-$deep-interview --deep --autoresearch "Optimizing the SQL of existing templates, or searching for more practical SQL from GitHub and other sources compared to templates that are similar to the current CRUD, to make spanner-manager easier to use overall."
+$commit
 
 ---
 
-$deep-interview --deep --autoresearch "Optimizing the SQL of existing templates, or searching for more practical SQL from GitHub and other sources compared to templates that are similar to the current CRUD, to make spanner-manager easier to use overall."
-
+<skill>
+<name>commit</name>
+<path>/Users/zchee/src/github.com/zchee/agent/codex/skills/commit/SKILL.md</path>
+---
+name: commit
+description: Split the current git worktree into one or more meaningful commits with clean staging boundaries and commit hygiene. Use when the user asks to commit current changes, wants related changes grouped into multiple commits, or needs help preparing commit messages without disturbing unrelated local modifications.
 ---
 
-$ralplan
+# Commit
 
----
+Use this skill to turn the current worktree into reviewable git commits.
 
-Use gemini-google-search and google-developer-knowledge MCP server for research Spanner knowledges
+## Workflow
 
----
+1. Inspect `git status --short`, the relevant diffs, and repository instructions before staging anything.
+2. Partition the worktree by concern.
+   - Keep unrelated user changes unstaged and untouched.
+   - Prefer the smallest coherent commit that still preserves behavior.
+3. Stage only the files or hunks that belong together.
+4. Review `git diff --cached --stat` and `git diff --cached` before each commit.
+5. Write a meaningful commit message from the staged diff instead of using generic phrasing.
+6. Commit with any repository-required flags or trailers.
+7. Re-check `git status --short` after each commit and repeat until the requested work is committed.
 
-Use grep, gemini-google-search and google-developer-knowledge MCP server for research Spanner knowledges
+## Rules
 
----
+- Never revert, discard, or absorb unrelated local changes just to make the worktree look clean.
+- If staged and unstaged hunks coexist in one file, verify that the split still leaves both states coherent.
+- Run the narrowest useful validation before committing when a fast, directly relevant check exists.
+- If the user did not provide commit-message text, derive it from the staged content and the repository's message conventions.
+- If a required precondition is missing, say so instead of forcing a partial or misleading commit.
 
-$team 6:executor .omx/plans/prd-sql-template-optimization-autoresearch.md
+## Output
 
----
+- Report the commits created, in order.
+- Note any remaining unstaged or uncommitted changes.
+- Call out skipped validation or blockers explicitly.
 
-$team 6:executor .omx/plans/prd-sql-template-optimization-autoresearch.md
-
----
-
-$team .omx/plans/prd-sql-template-optimization-autoresearch.md
-
----
-
-$team .omx/plans/prd-sql-template-optimization-autoresearch.md
-
----
-
-$team .omx/plans/prd-sql-template-optimization-autoresearch.md
-
----
-
-Team execute-omx-plans-prd-sql-temp: worker-2 said "ACK: worker-2 initialized" but has no start evidence (status: unknown). Next: check worker-2 msg/output, confirm task in omx ... [OMX_TMUX_INJECT]
-
----
-
-Team execute-omx-plans-prd-sql-temp: 7 msg(s) for leader. Next: read messages; keep orchestrating; if done, gracefully shut down: omx team shutdown execute-omx-plans-prd-sql-temp. [OMX_TMUX_INJECT]
-
----
-
-[OMX] worker-2 idle. Next: read worker-2's latest message/output, then assign the next concrete step or mark the task complete.. [OMX_TMUX_INJECT]
-
----
-
-[OMX] worker-3 idle. reason: no_task_assigned_to_worker_3. Next: read worker-3's latest message/output, then assign the next concrete step or mark the task complete.. [OMX_TMUX_INJECT]
-
----
-
-Team execute-omx-plans-prd-sql-temp: 10 msg(s) for leader. Next: read messages; keep orchestrating; if done, gracefully shut down: omx team shutdown execute-omx-plans-prd-sql-temp. [OMX_TMUX_INJECT]
-
----
-
-Team execute-omx-plans-prd-sql-temp: worker panes stalled, no progress 30s. Next: omx team status execute-omx-plans-prd-sql-temp; read worker messages; unblock/reassign or shutd... [OMX_TMUX_INJECT]
-
----
-
-Team execute-omx-plans-prd-sql-temp: 23 msg(s) for leader. Next: read messages; keep orchestrating; if done, gracefully shut down: omx team shutdown execute-omx-plans-prd-sql-temp. [OMX_TMUX_INJECT]
-
----
-
-Team execute-omx-plans-prd-sql-temp: worker panes stalled, no progress 30s. Next: omx team status execute-omx-plans-prd-sql-temp; read worker messages; unblock/reassign or shutd... [OMX_TMUX_INJECT]
-
----
-
-Team execute-omx-plans-prd-sql-temp: worker panes stalled, no progress 1m. Next: omx team status execute-omx-plans-prd-sql-temp; read worker messages; unblock/reassign or shutdown. [OMX_TMUX_INJECT]
-
----
-
-$team "
-- current generated contract remains CRUD + FindByPrimaryKey
-- shared generated DB interface remains ReadRow + Query
-- live index metadata is incomplete
-- DDL loader ignores index DDL
-- generator index-helper direction should be constrained by metadata prerequisites
-- final adopted direction remained Option C / Query-first / manual-guidance baseline
-
-Fix the above remaining tasks"
-
----
-
-Team execute-omx-context-fix-index: worker-2 said "ACK: worker-2 initialized" but has no start evidence (status: unknown). Next: check worker-2 msg/output, confirm task in omx t... [OMX_TMUX_INJECT]
-
----
-
-Team execute-omx-context-fix-index: 2 msg(s) for leader. Next: read messages; keep orchestrating; if done, gracefully shut down: omx team shutdown execute-omx-context-fix-index. [OMX_TMUX_INJECT]
-
----
-
-Team execute-omx-context-fix-index: worker-4 said "ACK: worker-4 initialized" but has no start evidence (status: unknown). Next: check worker-4 msg/output, confirm task in omx t... [OMX_TMUX_INJECT]
+</skill>
