@@ -524,6 +524,7 @@ func nextSignificantLine(src []byte, offset int) (lineStart, lineEnd int, ok boo
 func consumeImportDecl(src []byte, start int) int {
 	depth := 0
 	seenParen := false
+	inBlockComment := false
 	offset := start
 	for offset < len(src) {
 		lineStart := offset
@@ -535,9 +536,10 @@ func consumeImportDecl(src []byte, start int) int {
 			offset++
 		}
 		line := src[lineStart:lineEnd]
-		depth += bytes.Count(line, []byte("("))
-		depth -= bytes.Count(line, []byte(")"))
-		if bytes.Contains(line, []byte("(")) {
+		delta, hasParen, nextInBlockComment := importParenDelta(line, inBlockComment)
+		depth += delta
+		inBlockComment = nextInBlockComment
+		if hasParen {
 			seenParen = true
 		}
 		if !seenParen || depth <= 0 {
@@ -545,6 +547,52 @@ func consumeImportDecl(src []byte, start int) int {
 		}
 	}
 	return len(src)
+}
+
+func importParenDelta(line []byte, inBlockComment bool) (delta int, hasParen bool, nextInBlockComment bool) {
+	nextInBlockComment = inBlockComment
+	for i := 0; i < len(line); i++ {
+		if nextInBlockComment {
+			if i+1 < len(line) && line[i] == '*' && line[i+1] == '/' {
+				nextInBlockComment = false
+				i++
+			}
+			continue
+		}
+
+		if i+1 < len(line) {
+			switch {
+			case line[i] == '/' && line[i+1] == '/':
+				return delta, hasParen, nextInBlockComment
+			case line[i] == '/' && line[i+1] == '*':
+				nextInBlockComment = true
+				i++
+				continue
+			}
+		}
+
+		switch line[i] {
+		case '(', ')':
+			hasParen = true
+			if line[i] == '(' {
+				delta++
+			} else {
+				delta--
+			}
+		case '\'', '"', '`':
+			quote := line[i]
+			for i++; i < len(line); i++ {
+				if quote != '`' && line[i] == '\\' && i+1 < len(line) {
+					i++
+					continue
+				}
+				if line[i] == quote {
+					break
+				}
+			}
+		}
+	}
+	return delta, hasParen, nextInBlockComment
 }
 
 func joinGeneratedSections(parts ...[]byte) []byte {

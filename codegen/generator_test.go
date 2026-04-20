@@ -163,7 +163,9 @@ var _ = iterator.Done
 
 package {{ .PackageName }}
 
-import "context"
+import ( // ) inline comment must not terminate the import block
+	"context"
+)
 
 type SpannerDB interface {
 	Query(context.Context)
