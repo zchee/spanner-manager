@@ -612,7 +612,8 @@ func TestGenerator_Generate_TemplatePathOverride(t *testing.T) {
 		"header.go.tmpl": `// header override
 package {{ .PackageName }}
 `,
-		"spanner_db.go.tmpl": `
+		"spanner_db.go.tmpl": `//go:build !ignorebodyoverride
+
 
 type SpannerDB interface{}
 
@@ -653,6 +654,7 @@ func Find{{ .Type.Name }}ByPrimaryKey(db SpannerDB) string {
 		"helper": {
 			path: filepath.Join(outDir, "spanner_db.spanner.go"),
 			contains: []string{
+				`//go:build !ignorebodyoverride`,
 				`// header override`,
 				`SpannerDBOverrideMarker = "spanner override"`,
 			},
@@ -669,6 +671,13 @@ func Find{{ .Type.Name }}ByPrimaryKey(db SpannerDB) string {
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
 			content := readTextFile(t, tt.path)
+			if tt.path == filepath.Join(outDir, "spanner_db.spanner.go") {
+				buildTagIdx := strings.Index(content, "//go:build !ignorebodyoverride")
+				packageIdx := strings.Index(content, "package models")
+				if buildTagIdx < 0 || packageIdx < 0 || buildTagIdx > packageIdx {
+					t.Fatalf("%s build tag must appear before package clause:\n%s", tt.path, content)
+				}
+			}
 			for _, want := range tt.contains {
 				if !strings.Contains(content, want) {
 					t.Fatalf("%s missing %q", tt.path, want)

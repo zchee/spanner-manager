@@ -445,7 +445,8 @@ func splitGeneratedSource(src []byte) generatedSourceParts {
 			parts.rest = bytes.TrimLeft(parts.rest, "\n")
 			return parts
 		default:
-			parts.imports, parts.rest = extractImportSection(src)
+			parts.preamble = bytes.Trim(src[:lineStart], "\n")
+			parts.imports, parts.rest = extractImportSection(src[lineStart:])
 			parts.rest = bytes.TrimLeft(parts.rest, "\n")
 			return parts
 		}
