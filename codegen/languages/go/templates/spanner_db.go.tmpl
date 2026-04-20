@@ -29,7 +29,7 @@ func NewJSONString[T any](value T) JSONString[T] {
 }
 
 // EncodeSpanner implements spanner.Encoder.
-func (v JSONString[T]) EncodeSpanner() (interface{}, error) {
+func (v JSONString[T]) EncodeSpanner() (any, error) {
 	if !v.Valid {
 		return spanner.NullString{}, nil
 	}
@@ -41,7 +41,7 @@ func (v JSONString[T]) EncodeSpanner() (interface{}, error) {
 }
 
 // DecodeSpanner implements spanner.Decoder.
-func (v *JSONString[T]) DecodeSpanner(input interface{}) error {
+func (v *JSONString[T]) DecodeSpanner(input any) error {
 	return decodeJSONValue(&v.Value, &v.Valid, input)
 }
 
@@ -78,7 +78,7 @@ func NewJSONValue[T any](value T) JSONValue[T] {
 }
 
 // EncodeSpanner implements spanner.Encoder.
-func (v JSONValue[T]) EncodeSpanner() (interface{}, error) {
+func (v JSONValue[T]) EncodeSpanner() (any, error) {
 	if !v.Valid {
 		return spanner.NullJSON{}, nil
 	}
@@ -86,7 +86,7 @@ func (v JSONValue[T]) EncodeSpanner() (interface{}, error) {
 }
 
 // DecodeSpanner implements spanner.Decoder.
-func (v *JSONValue[T]) DecodeSpanner(input interface{}) error {
+func (v *JSONValue[T]) DecodeSpanner(input any) error {
 	return decodeJSONValue(&v.Value, &v.Valid, input)
 }
 
@@ -108,7 +108,7 @@ func (v *JSONValue[T]) UnmarshalJSON(payload []byte) error {
 	return unmarshalJSONValue(&v.Value, &v.Valid, payload)
 }
 
-func decodeJSONValue[T any](dst *T, valid *bool, input interface{}) error {
+func decodeJSONValue[T any](dst *T, valid *bool, input any) error {
 	switch value := input.(type) {
 	case nil:
 		return unmarshalJSONValue(dst, valid, nil)
