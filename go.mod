@@ -2,8 +2,6 @@ module github.com/zchee/spanner-manager
 
 go 1.26
 
-replace github.com/cloudspannerecosystem/memefish => github.com/zchee/memefish v0.0.0-20260420065142-4de6cb4bdb27
-
 require (
 	cloud.google.com/go/spanner v1.90.0
 	github.com/cloudspannerecosystem/memefish v0.6.3-0.20260220015148-e01a84ded886 // main
