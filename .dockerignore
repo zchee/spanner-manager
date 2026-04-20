@@ -1,17 +1,14 @@
-.agent/
-.agents/
+.claude/
 .codex/
 .entire/
 .git/
 .github/
-.omc/
-.omx/
 vendor/
 
 .dockerignore
-.envrc
 .gitattributes
 .gitignore
+AGENTS.md
 CODE_OF_CONDUCT.md
 Dockerfile
 LICENSE
