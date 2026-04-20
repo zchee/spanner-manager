@@ -576,8 +576,9 @@ func (g *Generator) formatGoSource(src []byte) []byte {
 	}
 
 	formatted, err = gofumpt.Source(formatted, gofumpt.Options{
-		ModulePath:  modulePath,
 		LangVersion: langVersion,
+		ModulePath:  modulePath,
+		ExtraRules:  true,
 	})
 	if err != nil {
 		// Write unformatted on format error for debugging.
