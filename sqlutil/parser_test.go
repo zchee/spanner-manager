@@ -54,6 +54,38 @@ func TestParseDDLs(t *testing.T) {
 	}
 }
 
+func TestParseExpr(t *testing.T) {
+	tests := map[string]struct {
+		sql      string
+		wantSQL  string
+		wantErr  bool
+	}{
+		"success: uuid cast": {
+			sql:     `CAST("123e4567-e89b-12d3-a456-426614174000" AS UUID)`,
+			wantSQL: `CAST("123e4567-e89b-12d3-a456-426614174000" AS UUID)`,
+		},
+		"error: invalid expression": {
+			sql:     "CAST(",
+			wantErr: true,
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			expr, err := ParseExpr(tt.sql)
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("ParseExpr() error = %v, wantErr %v", err, tt.wantErr)
+			}
+			if tt.wantErr {
+				return
+			}
+			if diff := cmp.Diff(tt.wantSQL, expr.SQL()); diff != "" {
+				t.Fatalf("ParseExpr() SQL mismatch (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
 func TestSplitStatements(t *testing.T) {
 	tests := map[string]struct {
 		sql      string

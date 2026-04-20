@@ -40,7 +40,10 @@ var knownImportAliases = map[string]string{
 	"json":    "encoding/json",
 	"spanner": "cloud.google.com/go/spanner",
 	"time":    "time",
+	"uuid":    "github.com/google/uuid",
 }
+
+const spannerUUIDTypeName = "UUID"
 
 func goTypeForSpannerTypeString(spannerType string, nullable bool) (goTypeInfo, error) {
 	schemaType, err := parseSchemaTypeString(spannerType)
@@ -84,6 +87,9 @@ func goTypeForSchemaType(schemaType ast.SchemaType, nullable bool) goTypeInfo {
 	case *ast.SizedSchemaType:
 		return scalarGoType(t.Name, nullable)
 	case *ast.NamedType:
+		if isUUIDNamedType(t) {
+			return uuidGoType(nullable)
+		}
 		return goTypeInfo{
 			Expr:            "spanner.GenericColumnValue",
 			BaseSpannerType: strings.ToUpper(pathNameFromIdentPath(t.Path)),
@@ -98,6 +104,9 @@ func goTypeForSchemaType(schemaType ast.SchemaType, nullable bool) goTypeInfo {
 
 func scalarGoType(name ast.ScalarTypeName, nullable bool) goTypeInfo {
 	base := strings.ToUpper(string(name))
+	if isUUIDScalarType(name) {
+		return uuidGoType(nullable)
+	}
 
 	if nullable {
 		switch name {
@@ -161,6 +170,31 @@ func scalarGoType(name ast.ScalarTypeName, nullable bool) goTypeInfo {
 		return goTypeInfo{Expr: "spanner.NullJSON", BaseSpannerType: base}
 	default:
 		return goTypeInfo{Expr: "spanner.GenericColumnValue", BaseSpannerType: base}
+	}
+}
+
+func isUUIDScalarType(name ast.ScalarTypeName) bool {
+	return strings.EqualFold(string(name), spannerUUIDTypeName)
+}
+
+func isUUIDNamedType(t *ast.NamedType) bool {
+	if t == nil || len(t.Path) != 1 {
+		return false
+	}
+	return strings.EqualFold(pathNameFromIdentPath(t.Path), spannerUUIDTypeName)
+}
+
+func uuidGoType(nullable bool) goTypeInfo {
+	if nullable {
+		return goTypeInfo{
+			Expr:            "spanner.NullUUID",
+			BaseSpannerType: spannerUUIDTypeName,
+		}
+	}
+	return goTypeInfo{
+		Expr:            "uuid.UUID",
+		BaseSpannerType: spannerUUIDTypeName,
+		Imports:         []ImportSpec{{Path: "github.com/google/uuid"}},
 	}
 }
 

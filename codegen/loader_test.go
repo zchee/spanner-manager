@@ -165,6 +165,64 @@ func TestDDLFileSource_Load_ArrayAndCommitTimestamp(t *testing.T) {
 	}
 }
 
+func TestDDLFileSource_Load_UUIDColumns(t *testing.T) {
+	ddl := `CREATE TABLE Sessions (
+		SessionId UUID NOT NULL,
+		ParentSessionId UUID,
+		SessionIds ARRAY<UUID>,
+	) PRIMARY KEY (SessionId)`
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, "schema.sql")
+	if err := os.WriteFile(path, []byte(ddl), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	source := NewDDLFileSource(path)
+	schema, err := source.Load(t.Context())
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if len(schema.Types) != 1 {
+		t.Fatalf("expected 1 type, got %d", len(schema.Types))
+	}
+
+	got := schema.Types[0]
+	if diff := cmp.Diff([]Field{
+		{
+			Name:            "SessionID",
+			ColumnName:      "SessionId",
+			GoType:          "uuid.UUID",
+			SpannerType:     "UUID",
+			BaseSpannerType: "UUID",
+			NotNull:         true,
+			IsPrimaryKey:    true,
+			Imports:         []ImportSpec{{Path: "github.com/google/uuid"}},
+		},
+		{
+			Name:            "ParentSessionID",
+			ColumnName:      "ParentSessionId",
+			GoType:          "spanner.NullUUID",
+			SpannerType:     "UUID",
+			BaseSpannerType: "UUID",
+		},
+		{
+			Name:            "SessionIDs",
+			ColumnName:      "SessionIds",
+			GoType:          "[]uuid.UUID",
+			SpannerType:     "ARRAY<UUID>",
+			BaseSpannerType: "UUID",
+			IsArray:         true,
+			Imports:         []ImportSpec{{Path: "github.com/google/uuid"}},
+		},
+	}, got.Fields); diff != "" {
+		t.Fatalf("fields mismatch (-want +got):\n%s", diff)
+	}
+	if diff := cmp.Diff([]Field{got.Fields[0]}, got.PrimaryKeyFields); diff != "" {
+		t.Fatalf("primary key fields mismatch (-want +got):\n%s", diff)
+	}
+}
+
 func TestSnakeToCamel(t *testing.T) {
 	tests := map[string]struct {
 		input    string

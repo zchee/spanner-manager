@@ -1,5 +1,8 @@
 # spanner-manager
 
+[![Test](https://github.com/zchee/spanner-manager/actions/workflows/test.yaml/badge.svg)](https://github.com/zchee/spanner-manager/actions/workflows/test.yaml)
+[![codecov](https://codecov.io/github/zchee/spanner-manager/graph/badge.svg?token=cpoqSGB5FL)](https://codecov.io/github/zchee/spanner-manager)
+
 Unified CLI for Cloud Spanner schema migration, schema diffing, and Go ORM code generation.
 
 Replaces three separate tools ([wrench](https://github.com/cloudspannerecosystem/wrench), [hammer](https://github.com/daichirata/hammer), [yo](https://github.com/cloudspannerecosystem/yo)) with a single binary, shared connection management, and a common SQL parser powered by [memefish](https://github.com/cloudspannerecosystem/memefish).
@@ -274,7 +277,7 @@ spanner-manager generate --from-ddl schema.sql -o ./models \
   --config codegen.yaml
 ```
 
-Generation writes a shared header file, a shared `spanner_db` helper, and one file per table into the output directory. This is useful when you want generated models checked into the repository.
+Generation writes a shared `spanner_db` helper and one file per table into the output directory. The `header.go.tmpl` template is used as the header section of each generated file rather than producing a standalone `spanner_header` file. This is useful when you want generated models checked into the repository.
 
 | Flag | Description |
 |---|---|
