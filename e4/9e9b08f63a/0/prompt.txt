@@ -1,0 +1,5 @@
+$autopilot "Support https://docs.cloud.google.com/spanner/docs/reference/standard-sql/data-types#uuid_type syntax with github.com/cloudspannerecosystem/memefish@4de6cb4bdb27"
+
+---
+
+$autopilot "Support https://docs.cloud.google.com/spanner/docs/reference/standard-sql/data-types#uuid_type syntax with github.com/zchee/memefish@4de6cb4bdb27"
