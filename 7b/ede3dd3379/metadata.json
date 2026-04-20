@@ -2,11 +2,11 @@
   "cli_version": "dev",
   "checkpoint_id": "7bede3dd3379",
   "strategy": "manual-commit",
-  "branch": "support-uuid",
+  "branch": "perf",
   "checkpoints_count": 1,
   "files_touched": [
     ".codex/config.toml",
-    "README.md"
+    "codegen/languages/go/templates/spanner_db.go.tmpl"
   ],
   "sessions": [
     {
