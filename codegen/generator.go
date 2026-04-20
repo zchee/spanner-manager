@@ -564,6 +564,7 @@ func joinGeneratedSections(parts ...[]byte) []byte {
 
 func (g *Generator) formatGoSource(src []byte) []byte {
 	modulePath, langVersion := detectGoModuleConfig(g.opts.OutDir)
+	imports.LocalPrefix = modulePath
 	formatted, err := imports.Process("", src, &imports.Options{
 		TabWidth:  8,
 		TabIndent: true,
