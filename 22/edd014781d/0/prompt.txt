@@ -41,7 +41,3 @@ Use this skill to turn the current worktree into reviewable git commits.
 - Call out skipped validation or blockers explicitly.
 
 </skill>
-
----
-
-$autopilot $use-modern-go "Fix https://github.com/zchee/spanner-manager/pull/7#discussion_r3111419684 reviwed point and add test case"
