@@ -1,7 +1,7 @@
 import (
-{{ range .Type.Imports }}
+{{ range .Type.Imports -}}
 	{{ if .Alias }}{{ .Alias }} {{ end }}"{{ .Path }}"
-{{ end }}
+{{ end -}}
 )
 
 // {{ .Type.Name }} represents a row from '{{ .Type.Table }}'.

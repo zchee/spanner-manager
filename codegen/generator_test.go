@@ -461,6 +461,30 @@ func TestGenerator_Generate_NullableUUIDBuilds(t *testing.T) {
 	runGoTestDir(t, outDir)
 }
 
+func TestGenerator_Generate_UUIDImportsShareThirdPartyGroup(t *testing.T) {
+	ddl := `CREATE TABLE Users (
+		id UUID NOT NULL,
+		name STRING(MAX) NOT NULL,
+	) PRIMARY KEY (id)`
+
+	root := newCompileFixtureRoot(t)
+	outDir := generateFromDDL(t, root, ddl, Options{PackageName: "models"})
+	content := readTextFile(t, filepath.Join(outDir, "users.spanner.go"))
+
+	const wantImportBlock = `import (
+	"context"
+	"fmt"
+
+	"cloud.google.com/go/spanner"
+	"github.com/google/uuid"
+)`
+	if !strings.Contains(content, wantImportBlock) {
+		t.Fatalf("users.spanner.go missing grouped UUID import block:\n%s", content)
+	}
+
+	runGoTestDir(t, outDir)
+}
+
 func TestGenerator_Generate_CommitTimestampHelpers(t *testing.T) {
 	ddl := `CREATE TABLE Runs (
 		run_id INT64 NOT NULL,
