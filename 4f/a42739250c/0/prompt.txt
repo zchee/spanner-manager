@@ -1,0 +1,1 @@
+$autopilot "Support `XXXWritableColumns` to generate function using `github.com/cloudspannerecosystem/memefish/ast.GeneratedColumnExpr` and `github.com/cloudspannerecosystem/memefish/ast.ColumnDefaultExpr`"
