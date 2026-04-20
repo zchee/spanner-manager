@@ -57,6 +57,7 @@ type Options struct {
 type Generator struct {
 	opts       Options
 	templateFS fs.FS
+	types      []Type
 }
 
 // NewGenerator creates a new Generator.
@@ -102,10 +103,9 @@ func (g *Generator) Generate(schema *Schema) error {
 		return fmt.Errorf("selecting tables: %w", err)
 	}
 	filteredSchema := &Schema{Types: selectedTypes}
-
-	// Generate header file.
-	if err := g.generateHeader(filteredSchema); err != nil {
-		return fmt.Errorf("generating header: %w", err)
+	g.types = filteredSchema.Types
+	if err := g.removeLegacyHeaderFile(); err != nil {
+		return fmt.Errorf("removing legacy header: %w", err)
 	}
 
 	// Generate spanner_db file.
@@ -275,16 +275,10 @@ func (g *Generator) filterTypes(types []Type) ([]Type, error) {
 	return filtered, nil
 }
 
-func (g *Generator) generateHeader(schema *Schema) error {
-	return g.writeTemplate("spanner_header"+g.opts.Suffix, headerTemplateName, map[string]any{
-		"PackageName": g.opts.PackageName,
-		"Types":       schema.Types,
-	})
-}
-
 func (g *Generator) generateSpannerDB() error {
 	return g.writeTemplate("spanner_db"+g.opts.Suffix, spannerDBTemplateName, map[string]any{
 		"PackageName": g.opts.PackageName,
+		"Types":       g.types,
 	})
 }
 
@@ -295,8 +289,18 @@ func (g *Generator) generateType(t *Type) error {
 	}
 	return g.writeTemplate(filename+g.opts.Suffix, typeTemplateName, map[string]any{
 		"PackageName": g.opts.PackageName,
+		"Types":       g.types,
 		"Type":        t,
 	})
+}
+
+func (g *Generator) removeLegacyHeaderFile() error {
+	path := filepath.Join(g.opts.OutDir, "spanner_header"+g.opts.Suffix)
+	err := os.Remove(path)
+	if err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	return nil
 }
 
 func (g *Generator) writeTemplate(filename, templateName string, data any) error {
@@ -312,16 +316,22 @@ func (g *Generator) writeTemplate(filename, templateName string, data any) error
 	if err != nil {
 		return fmt.Errorf("reading template %s: %w", templateName, err)
 	}
-
-	tmpl, err := template.New(templateName).Funcs(funcMap).Parse(string(tmplText))
+	headerText, err := fs.ReadFile(g.templateFS, headerTemplateName)
 	if err != nil {
-		return fmt.Errorf("parsing template %s: %w", templateName, err)
+		return fmt.Errorf("reading template %s: %w", headerTemplateName, err)
+	}
+
+	header, err := executeTemplate(headerTemplateName, string(headerText), funcMap, data)
+	if err != nil {
+		return fmt.Errorf("executing template %s: %w", headerTemplateName, err)
+	}
+	body, err := executeTemplate(templateName, string(tmplText), funcMap, data)
+	if err != nil {
+		return fmt.Errorf("executing template %s: %w", templateName, err)
 	}
 
 	var buf bytes.Buffer
-	if err := tmpl.Execute(&buf, data); err != nil {
-		return fmt.Errorf("executing template: %w", err)
-	}
+	buf.Write(mergeGeneratedFile(header, body))
 
 	// Format Go code.
 	if g.opts.Language == "go" {
@@ -336,6 +346,220 @@ func (g *Generator) writeTemplate(filename, templateName string, data any) error
 	}
 
 	return nil
+}
+
+func executeTemplate(name, tmplText string, funcMap template.FuncMap, data any) ([]byte, error) {
+	tmpl, err := template.New(name).Funcs(funcMap).Parse(tmplText)
+	if err != nil {
+		return nil, fmt.Errorf("parsing template %s: %w", name, err)
+	}
+
+	var buf bytes.Buffer
+	if err := tmpl.Execute(&buf, data); err != nil {
+		return nil, err
+	}
+
+	return buf.Bytes(), nil
+}
+
+func mergeGeneratedFile(header, body []byte) []byte {
+	headerParts := splitGeneratedSource(header)
+	bodyParts := splitGeneratedSource(body)
+
+	packageLine := headerParts.packageLine
+	if len(packageLine) == 0 {
+		packageLine = bodyParts.packageLine
+	}
+
+	sections := make([][]byte, 0, 4)
+	if preamble := joinGeneratedSections(bodyParts.preamble, headerParts.preamble); len(preamble) != 0 {
+		sections = append(sections, preamble)
+	}
+	if len(packageLine) != 0 {
+		sections = append(sections, packageLine)
+	}
+	if imports := joinGeneratedSections(headerParts.imports, bodyParts.imports); len(imports) != 0 {
+		sections = append(sections, imports)
+	}
+	if rest := joinGeneratedSections(headerParts.rest, bodyParts.rest); len(rest) != 0 {
+		sections = append(sections, rest)
+	}
+	if len(sections) == 0 {
+		return nil
+	}
+	return append(bytes.Join(sections, []byte("\n\n")), '\n')
+}
+
+type generatedSourceParts struct {
+	preamble    []byte
+	packageLine []byte
+	imports     []byte
+	rest        []byte
+}
+
+func splitGeneratedSource(src []byte) generatedSourceParts {
+	var parts generatedSourceParts
+	src = bytes.TrimLeft(src, "\n")
+	if len(src) == 0 {
+		return parts
+	}
+
+	offset := 0
+	inBlockComment := false
+	for offset < len(src) {
+		lineStart := offset
+		for offset < len(src) && src[offset] != '\n' {
+			offset++
+		}
+		lineEnd := offset
+		next := offset
+		if next < len(src) && src[next] == '\n' {
+			next++
+		}
+
+		line := bytes.TrimSpace(src[lineStart:lineEnd])
+		if inBlockComment {
+			if bytes.Contains(line, []byte("*/")) {
+				inBlockComment = false
+			}
+			offset = next
+			continue
+		}
+		switch {
+		case len(line) == 0:
+			offset = next
+			continue
+		case bytes.HasPrefix(line, []byte("//")):
+			offset = next
+			continue
+		case bytes.HasPrefix(line, []byte("/*")):
+			if !bytes.Contains(line, []byte("*/")) {
+				inBlockComment = true
+			}
+			offset = next
+			continue
+		case bytes.HasPrefix(line, []byte("package ")):
+			parts.preamble = bytes.Trim(src[:lineStart], "\n")
+			parts.packageLine = bytes.TrimSpace(src[lineStart:lineEnd])
+			parts.imports, parts.rest = extractImportSection(src[next:])
+			parts.rest = bytes.TrimLeft(parts.rest, "\n")
+			return parts
+		default:
+			parts.imports, parts.rest = extractImportSection(src)
+			parts.rest = bytes.TrimLeft(parts.rest, "\n")
+			return parts
+		}
+	}
+
+	parts.rest = bytes.Trim(src, "\n")
+	return parts
+}
+
+func extractImportSection(src []byte) (imports, rest []byte) {
+	offset := 0
+	firstImportStart := -1
+	lastImportEnd := 0
+
+	for {
+		candidateStart := offset
+		significantStart, lineEnd, ok := nextSignificantLine(src, offset)
+		if !ok {
+			if firstImportStart < 0 {
+				return nil, src
+			}
+			return bytes.Trim(src[firstImportStart:lastImportEnd], "\n"), src[lastImportEnd:]
+		}
+		trimmed := bytes.TrimSpace(src[significantStart:lineEnd])
+		if !bytes.HasPrefix(trimmed, []byte("import ")) {
+			if firstImportStart < 0 {
+				return nil, src
+			}
+			return bytes.Trim(src[firstImportStart:lastImportEnd], "\n"), src[lastImportEnd:]
+		}
+		if firstImportStart < 0 {
+			firstImportStart = candidateStart
+		}
+		declEnd := consumeImportDecl(src, significantStart)
+		lastImportEnd = declEnd
+		offset = declEnd
+	}
+}
+
+func nextSignificantLine(src []byte, offset int) (lineStart, lineEnd int, ok bool) {
+	inBlockComment := false
+	for offset < len(src) {
+		lineStart = offset
+		for offset < len(src) && src[offset] != '\n' {
+			offset++
+		}
+		lineEnd = offset
+		if offset < len(src) && src[offset] == '\n' {
+			offset++
+		}
+
+		line := bytes.TrimSpace(src[lineStart:lineEnd])
+		if inBlockComment {
+			if bytes.Contains(line, []byte("*/")) {
+				inBlockComment = false
+			}
+			continue
+		}
+		switch {
+		case len(line) == 0:
+			continue
+		case bytes.HasPrefix(line, []byte("//")):
+			continue
+		case bytes.HasPrefix(line, []byte("/*")):
+			if !bytes.Contains(line, []byte("*/")) {
+				inBlockComment = true
+			}
+			continue
+		default:
+			return lineStart, lineEnd, true
+		}
+	}
+	return 0, 0, false
+}
+
+func consumeImportDecl(src []byte, start int) int {
+	depth := 0
+	seenParen := false
+	offset := start
+	for offset < len(src) {
+		lineStart := offset
+		for offset < len(src) && src[offset] != '\n' {
+			offset++
+		}
+		lineEnd := offset
+		if offset < len(src) && src[offset] == '\n' {
+			offset++
+		}
+		line := src[lineStart:lineEnd]
+		depth += bytes.Count(line, []byte("("))
+		depth -= bytes.Count(line, []byte(")"))
+		if bytes.Contains(line, []byte("(")) {
+			seenParen = true
+		}
+		if !seenParen || depth <= 0 {
+			return offset
+		}
+	}
+	return len(src)
+}
+
+func joinGeneratedSections(parts ...[]byte) []byte {
+	trimmed := make([][]byte, 0, len(parts))
+	for _, part := range parts {
+		part = bytes.Trim(part, "\n")
+		if len(part) == 0 {
+			continue
+		}
+		trimmed = append(trimmed, part)
+	}
+	if len(trimmed) == 0 {
+		return nil
+	}
+	return bytes.Join(trimmed, []byte("\n\n"))
 }
 
 func (g *Generator) formatGoSource(src []byte) []byte {
