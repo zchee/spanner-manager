@@ -4,6 +4,7 @@ import (
 
 	"cloud.google.com/go/spanner"
 	"github.com/google/uuid"
+	"github.com/googleapis/gax-go/v2/apierror"
 	"google.golang.org/api/iterator"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -11,12 +12,55 @@ import (
 
 // SpannerDB is the common interface for spanner operations.
 type SpannerDB interface {
+	Read(ctx context.Context, table string, keys spanner.KeySet, columns []string) *spanner.RowIterator
 	ReadRow(ctx context.Context, table string, key spanner.Key, columns []string) (*spanner.Row, error)
 	Query(ctx context.Context, statement spanner.Statement) *spanner.RowIterator
 }
 
 // SpannerLog provides an optional logger for generated code.
 var SpannerLog = func(context.Context, string, ...any) {}
+
+func newError(method, table string, err error) error {
+	code := spanner.ErrCode(err)
+	return newErrorWithCode(code, method, table, err)
+}
+
+func newErrorWithCode(code codes.Code, method, table string, err error) error {
+	return &spannerError{
+		code:   code,
+		method: method,
+		table:  table,
+		err:    err,
+	}
+}
+
+type spannerError struct {
+	code   codes.Code
+	method string
+	table  string
+	err    error
+}
+
+func (e spannerError) Error() string {
+	return fmt.Sprintf("spannerError error in %s(%s): %v", e.method, e.table, e.err)
+}
+
+func (e spannerError) Unwrap() error {
+	return e.err
+}
+
+// GRPCStatus implements a conversion to a gRPC status using `status.Convert(error)`.
+//
+// If the error is originated from the Spanner library, this returns a gRPC status of
+// the original error. It may contain details of the status such as RetryInfo.
+func (e spannerError) GRPCStatus() *status.Status {
+	var ae *apierror.APIError
+	if errors.As(e.err, &ae) {
+		return status.Convert(ae)
+	}
+
+	return status.New(e.code, e.Error())
+}
 
 // JSONString maps a STRING column that stores JSON into a typed Go value.
 type JSONString[T any] struct {
