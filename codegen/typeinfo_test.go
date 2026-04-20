@@ -18,6 +18,7 @@ import (
 	"strings"
 	"testing"
 
+	"cloud.google.com/go/spanner"
 	"github.com/cloudspannerecosystem/memefish/ast"
 	"github.com/google/go-cmp/cmp"
 )
@@ -93,6 +94,140 @@ func TestRefreshTypeMetadata_PreservesPrimaryKeyOrdinal(t *testing.T) {
 
 	if diff := cmp.Diff([]Field{typ.Fields[1], typ.Fields[0]}, typ.PrimaryKeyFields); diff != "" {
 		t.Fatalf("primary key fields mismatch (-want +got):\n%s", diff)
+	}
+}
+
+func TestFieldIsWritable(t *testing.T) {
+	tests := map[string]struct {
+		field Field
+		want  bool
+	}{
+		"plain column": {
+			field: Field{Name: "Name"},
+			want:  true,
+		},
+		"default column": {
+			field: Field{Name: "CreatedAt", HasDefault: true},
+			want:  false,
+		},
+		"generated column": {
+			field: Field{Name: "ShardID", IsGenerated: true},
+			want:  false,
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			if diff := cmp.Diff(tt.want, tt.field.IsWritable()); diff != "" {
+				t.Fatalf("IsWritable() mismatch (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+func TestRefreshTypeMetadata_PopulatesWritableFields(t *testing.T) {
+	typ := Type{
+		Fields: []Field{
+			{
+				Name:         "UserID",
+				ColumnName:   "user_id",
+				IsPrimaryKey: true,
+			},
+			{
+				Name:       "DisplayName",
+				ColumnName: "display_name",
+			},
+			{
+				Name:       "Nickname",
+				ColumnName: "nickname",
+				HasDefault: true,
+			},
+			{
+				Name:        "DisplayNameLower",
+				ColumnName:  "display_name_lower",
+				IsGenerated: true,
+			},
+		},
+	}
+
+	refreshTypeMetadata(&typ)
+
+	if diff := cmp.Diff([]Field{typ.Fields[0], typ.Fields[1]}, typ.WritableFields); diff != "" {
+		t.Fatalf("writable fields mismatch (-want +got):\n%s", diff)
+	}
+}
+
+func TestFieldWriteSemanticsFromDefaultSemantics(t *testing.T) {
+	tests := map[string]struct {
+		semantics   ast.ColumnDefaultSemantics
+		wantDefault bool
+		wantGen     bool
+	}{
+		"no semantics": {},
+		"default expr": {
+			semantics:   &ast.ColumnDefaultExpr{},
+			wantDefault: true,
+		},
+		"generated expr": {
+			semantics: &ast.GeneratedColumnExpr{},
+			wantGen:   true,
+		},
+		"identity treated as default-managed": {
+			semantics:   &ast.IdentityColumn{},
+			wantDefault: true,
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			gotDefault, gotGen := fieldWriteSemanticsFromDefaultSemantics(tt.semantics)
+			if diff := cmp.Diff(tt.wantDefault, gotDefault); diff != "" {
+				t.Fatalf("hasDefault mismatch (-want +got):\n%s", diff)
+			}
+			if diff := cmp.Diff(tt.wantGen, gotGen); diff != "" {
+				t.Fatalf("isGenerated mismatch (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+func TestFieldWriteSemanticsFromInformationSchema(t *testing.T) {
+	tests := map[string]struct {
+		columnDefault       string
+		columnDefaultValid  bool
+		generationExpr      string
+		generationExprValid bool
+		wantDefault         bool
+		wantGen             bool
+	}{
+		"plain column": {},
+		"default column": {
+			columnDefault:      "CURRENT_TIMESTAMP()",
+			columnDefaultValid: true,
+			wantDefault:        true,
+		},
+		"generated column wins": {
+			columnDefault:       "CURRENT_TIMESTAMP()",
+			columnDefaultValid:  true,
+			generationExpr:      "LOWER(DisplayName)",
+			generationExprValid: true,
+			wantGen:             true,
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			gotDefault, gotGen := fieldWriteSemanticsFromInformationSchema(
+				spanner.NullString{StringVal: tt.columnDefault, Valid: tt.columnDefaultValid},
+				spanner.NullString{StringVal: tt.generationExpr, Valid: tt.generationExprValid},
+			)
+			if diff := cmp.Diff(tt.wantDefault, gotDefault); diff != "" {
+				t.Fatalf("hasDefault mismatch (-want +got):\n%s", diff)
+			}
+			if diff := cmp.Diff(tt.wantGen, gotGen); diff != "" {
+				t.Fatalf("isGenerated mismatch (-want +got):\n%s", diff)
+			}
+		})
 	}
 }
 

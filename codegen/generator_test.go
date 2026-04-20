@@ -82,6 +82,7 @@ func TestGenerator_Generate_BasicFiles(t *testing.T) {
 				"type Users struct",
 				"UserID int64",
 				`spanner:"name"`,
+				"func UsersWritableColumns() []string",
 				"func (t *Users) Insert() *spanner.Mutation",
 				"func FindUsersByPrimaryKey(ctx context.Context, db SpannerDB, userID int64) (*Users, error)",
 			},
@@ -511,6 +512,56 @@ func TestGenerator_Generate_CommitTimestampHelpers(t *testing.T) {
 	}
 }
 
+func TestGenerator_Generate_WritableColumns(t *testing.T) {
+	ddl := `CREATE TABLE Users (
+		id INT64 NOT NULL,
+		display_name STRING(MAX),
+		nickname STRING(MAX) DEFAULT ('guest'),
+		display_name_lower STRING(MAX) AS (LOWER(display_name)) STORED,
+	) PRIMARY KEY (id)`
+
+	root := newCompileFixtureRoot(t)
+	outDir := generateFromDDL(t, root, ddl, Options{PackageName: "models"})
+	content := readTextFile(t, filepath.Join(outDir, "users.spanner.go"))
+
+	tests := map[string]string{
+		"writable columns helper": `func UsersWritableColumns() []string {
+	return []string{
+		"id",
+		"display_name",
+	}
+}`,
+		"insert uses writable columns": `func (t *Users) Insert() *spanner.Mutation {
+	return spanner.Insert("Users", UsersWritableColumns(), []any{
+		t.ID,
+		t.DisplayName,
+	})
+}`,
+		"update uses writable columns": `func (t *Users) Update() *spanner.Mutation {
+	return spanner.Update("Users", UsersWritableColumns(), []any{
+		t.ID,
+		t.DisplayName,
+	})
+}`,
+		"upsert uses writable columns": `func (t *Users) InsertOrUpdate() *spanner.Mutation {
+	return spanner.InsertOrUpdate("Users", UsersWritableColumns(), []any{
+		t.ID,
+		t.DisplayName,
+	})
+}`,
+	}
+
+	for name, want := range tests {
+		t.Run(name, func(t *testing.T) {
+			if !strings.Contains(content, want) {
+				t.Fatalf("users.spanner.go missing %q", want)
+			}
+		})
+	}
+
+	runGoTestDir(t, outDir)
+}
+
 func TestGenerator_Generate_CompileGeneratedOutput(t *testing.T) {
 	tests := map[string]struct {
 		ddl       string
@@ -587,6 +638,14 @@ type Payload struct {
 					},
 				}
 			},
+		},
+		"success: writable columns compile with default and generated expressions": {
+			ddl: `CREATE TABLE Runs (
+				id INT64 NOT NULL,
+				created_at TIMESTAMP DEFAULT (CURRENT_TIMESTAMP()),
+				name STRING(MAX),
+				name_lower STRING(MAX) AS (LOWER(name)) STORED,
+			) PRIMARY KEY (id)`,
 		},
 	}
 

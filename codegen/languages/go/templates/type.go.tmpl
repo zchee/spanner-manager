@@ -20,6 +20,15 @@ func {{ .Type.Name }}Columns() []string {
 	}
 }
 
+// {{ .Type.Name }}WritableColumns returns the writable columns for {{ .Type.Name }}.
+func {{ .Type.Name }}WritableColumns() []string {
+	return []string{
+{{- range .Type.WritableFields }}
+		"{{ .ColumnName }}",
+{{- end }}
+	}
+}
+
 // {{ .Type.Name }}PrimaryKeys returns the primary key columns.
 func {{ .Type.Name }}PrimaryKeys() []string {
 	return []string{
@@ -31,8 +40,8 @@ func {{ .Type.Name }}PrimaryKeys() []string {
 
 // Insert returns a Mutation to insert a row into {{ .Type.Table }}.
 func (t *{{ .Type.Name }}) Insert() *spanner.Mutation {
-	return spanner.Insert("{{ .Type.Table }}", {{ .Type.Name }}Columns(), []any{
-{{- range .Type.Fields }}
+	return spanner.Insert("{{ .Type.Table }}", {{ .Type.Name }}WritableColumns(), []any{
+{{- range .Type.WritableFields }}
 		t.{{ .Name }},
 {{- end }}
 	})
@@ -40,8 +49,8 @@ func (t *{{ .Type.Name }}) Insert() *spanner.Mutation {
 
 // Update returns a Mutation to update a row in {{ .Type.Table }}.
 func (t *{{ .Type.Name }}) Update() *spanner.Mutation {
-	return spanner.Update("{{ .Type.Table }}", {{ .Type.Name }}Columns(), []any{
-{{- range .Type.Fields }}
+	return spanner.Update("{{ .Type.Table }}", {{ .Type.Name }}WritableColumns(), []any{
+{{- range .Type.WritableFields }}
 		t.{{ .Name }},
 {{- end }}
 	})
@@ -49,8 +58,8 @@ func (t *{{ .Type.Name }}) Update() *spanner.Mutation {
 
 // InsertOrUpdate returns a Mutation to insert or update a row in {{ .Type.Table }}.
 func (t *{{ .Type.Name }}) InsertOrUpdate() *spanner.Mutation {
-	return spanner.InsertOrUpdate("{{ .Type.Table }}", {{ .Type.Name }}Columns(), []any{
-{{- range .Type.Fields }}
+	return spanner.InsertOrUpdate("{{ .Type.Table }}", {{ .Type.Name }}WritableColumns(), []any{
+{{- range .Type.WritableFields }}
 		t.{{ .Name }},
 {{- end }}
 	})

@@ -32,6 +32,7 @@ type Type struct {
 	Table            string
 	FileNameBase     string
 	Fields           []Field
+	WritableFields   []Field
 	PrimaryKeyFields []Field
 	CommitTSFields   []Field
 	Indexes          []IndexInfo
@@ -47,6 +48,7 @@ type Field struct {
 	BaseSpannerType      string
 	IsArray              bool
 	NotNull              bool
+	HasDefault           bool
 	IsGenerated          bool
 	IsPrimaryKey         bool
 	AllowCommitTimestamp bool

@@ -223,6 +223,67 @@ func TestDDLFileSource_Load_UUIDColumns(t *testing.T) {
 	}
 }
 
+func TestDDLFileSource_Load_WritableColumnMetadata(t *testing.T) {
+	ddl := `CREATE TABLE Users (
+		UserId INT64 NOT NULL,
+		DisplayName STRING(MAX),
+		Nickname STRING(MAX) DEFAULT ('guest'),
+		DisplayNameLower STRING(MAX) AS (LOWER(DisplayName)) STORED,
+	) PRIMARY KEY (UserId)`
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, "schema.sql")
+	if err := os.WriteFile(path, []byte(ddl), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	source := NewDDLFileSource(path)
+	schema, err := source.Load(t.Context())
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if len(schema.Types) != 1 {
+		t.Fatalf("expected 1 type, got %d", len(schema.Types))
+	}
+
+	got := schema.Types[0]
+	if diff := cmp.Diff([]Field{
+		got.Fields[0],
+		got.Fields[1],
+	}, got.WritableFields); diff != "" {
+		t.Fatalf("writable fields mismatch (-want +got):\n%s", diff)
+	}
+
+	tests := map[string]struct {
+		field       Field
+		hasDefault  bool
+		isGenerated bool
+	}{
+		"plain column": {
+			field: got.Fields[1],
+		},
+		"default column": {
+			field:      got.Fields[2],
+			hasDefault: true,
+		},
+		"generated column": {
+			field:       got.Fields[3],
+			isGenerated: true,
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			if diff := cmp.Diff(tt.hasDefault, tt.field.HasDefault); diff != "" {
+				t.Fatalf("HasDefault mismatch (-want +got):\n%s", diff)
+			}
+			if diff := cmp.Diff(tt.isGenerated, tt.field.IsGenerated); diff != "" {
+				t.Fatalf("IsGenerated mismatch (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
 func TestSnakeToCamel(t *testing.T) {
 	tests := map[string]struct {
 		input    string

@@ -198,9 +198,16 @@ func uuidGoType(nullable bool) goTypeInfo {
 	}
 }
 
+func (f Field) IsWritable() bool {
+	return !f.IsGenerated && !f.HasDefault
+}
+
 func refreshTypeMetadata(t *Type) {
 	t.PrimaryKeyFields = refreshOrderedFields(t.Fields, t.PrimaryKeyFields, func(field Field) bool {
 		return field.IsPrimaryKey
+	})
+	t.WritableFields = refreshOrderedFields(t.Fields, t.WritableFields, func(field Field) bool {
+		return field.IsWritable()
 	})
 	t.CommitTSFields = t.CommitTSFields[:0]
 
