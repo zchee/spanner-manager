@@ -1,0 +1,72 @@
+{
+  "cli_version": "dev",
+  "checkpoint_id": "22edd014781d",
+  "session_id": "019daa6e-e5cf-7a83-928d-bf1de10a1eb9",
+  "strategy": "manual-commit",
+  "created_at": "2026-04-20T15:42:47.328208Z",
+  "branch": "support-uuid",
+  "checkpoints_count": 1,
+  "files_touched": [
+    "codegen/generator.go",
+    "codegen/generator_test.go"
+  ],
+  "agent": "Codex",
+  "model": "gpt-5.4",
+  "turn_id": "863e060e7df0",
+  "checkpoint_transcript_start": 1171,
+  "transcript_lines_at_start": 1171,
+  "token_usage": {
+    "input_tokens": 4494667,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 4169088,
+    "output_tokens": 6850,
+    "api_call_count": 19
+  },
+  "session_metrics": {
+    "turn_count": 10
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-04-20T15:42:47.26316Z",
+    "agent_lines": 12,
+    "agent_removed": 2,
+    "human_added": 0,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 12,
+    "total_lines_changed": 14,
+    "agent_percentage": 100,
+    "metric_version": 2
+  },
+  "prompt_attributions": [
+    {
+      "checkpoint_number": 1,
+      "user_lines_added": 593,
+      "user_lines_removed": 0,
+      "agent_lines_added": 0,
+      "agent_lines_removed": 0,
+      "user_added_per_file": {
+        ".agent/PLANS.md": 243,
+        ".agents/plans/improve-codegen.md": 204,
+        ".envrc": 1,
+        ".omc/project-memory.json": 129,
+        ".omc/sessions/37eaa247-a76a-49bf-9ead-416b244fa606.json": 8,
+        ".omc/sessions/88b550f6-9671-4b51-b9cb-7aa11ae89b04.json": 8
+      }
+    },
+    {
+      "checkpoint_number": 2,
+      "user_lines_added": 593,
+      "user_lines_removed": 0,
+      "agent_lines_added": 12,
+      "agent_lines_removed": 2,
+      "user_added_per_file": {
+        ".agent/PLANS.md": 243,
+        ".agents/plans/improve-codegen.md": 204,
+        ".envrc": 1,
+        ".omc/project-memory.json": 129,
+        ".omc/sessions/37eaa247-a76a-49bf-9ead-416b244fa606.json": 8,
+        ".omc/sessions/88b550f6-9671-4b51-b9cb-7aa11ae89b04.json": 8
+      }
+    }
+  ]
+}
