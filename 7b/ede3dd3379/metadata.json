@@ -6,7 +6,8 @@
   "checkpoints_count": 1,
   "files_touched": [
     ".codex/config.toml",
-    "codegen/languages/go/templates/spanner_db.go.tmpl"
+    "codegen/languages/go/templates/spanner_db.go.tmpl",
+    "codegen/languages/go/templates/type.go.tmpl"
   ],
   "sessions": [
     {
