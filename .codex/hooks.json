@@ -10,15 +10,6 @@
             "timeout": 30
           }
         ]
-      },
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node \"/Users/zchee/src/github.com/Yeachan-Heo/oh-my-codex/dist/scripts/codex-native-hook.js\"",
-            "statusMessage": "Running OMX tool review"
-          }
-        ]
       }
     ],
     "PreToolUse": [
@@ -29,16 +20,6 @@
             "type": "command",
             "command": "entire hooks codex pre-tool-use",
             "timeout": 30
-          }
-        ]
-      },
-      {
-        "matcher": "Bash",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node \"/Users/zchee/src/github.com/Yeachan-Heo/oh-my-codex/dist/scripts/codex-native-hook.js\"",
-            "statusMessage": "Running OMX Bash preflight"
           }
         ]
       }
@@ -53,15 +34,6 @@
             "timeout": 30
           }
         ]
-      },
-      {
-        "matcher": "startup|resume",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node \"/Users/zchee/src/github.com/Yeachan-Heo/oh-my-codex/dist/scripts/codex-native-hook.js\""
-          }
-        ]
       }
     ],
     "Stop": [
@@ -71,15 +43,6 @@
           {
             "type": "command",
             "command": "entire hooks codex stop",
-            "timeout": 30
-          }
-        ]
-      },
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node \"/Users/zchee/src/github.com/Yeachan-Heo/oh-my-codex/dist/scripts/codex-native-hook.js\"",
             "timeout": 30
           }
         ]
@@ -93,15 +56,6 @@
             "type": "command",
             "command": "entire hooks codex user-prompt-submit",
             "timeout": 30
-          }
-        ]
-      },
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node \"/Users/zchee/src/github.com/Yeachan-Heo/oh-my-codex/dist/scripts/codex-native-hook.js\"",
-            "statusMessage": "Applying OMX prompt routing"
           }
         ]
       }
