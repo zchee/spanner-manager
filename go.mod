@@ -64,3 +64,5 @@ require (
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260406210006-6f92a3bedf2d // indirect
 	google.golang.org/protobuf v1.36.11 // indirect
 )
+
+replace github.com/cloudspannerecosystem/memefish => github.com/zchee/memefish v0.0.0-20260420065142-4de6cb4bdb27

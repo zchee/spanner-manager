@@ -309,6 +309,22 @@ func TestGenerator_Generate_CompositePrimaryKeyOrder(t *testing.T) {
 	runGoTestDir(t, outDir)
 }
 
+func TestGenerator_Generate_NullableUUIDBuilds(t *testing.T) {
+	ddl := `CREATE TABLE Sessions (
+		id INT64 NOT NULL,
+		parent_session_id UUID,
+	) PRIMARY KEY (id)`
+
+	root := newCompileFixtureRoot(t)
+	outDir := generateFromDDL(t, root, ddl, Options{PackageName: "models"})
+	content := readTextFile(t, filepath.Join(outDir, "sessions.spanner.go"))
+	if strings.Contains(content, `"github.com/google/uuid"`) {
+		t.Fatalf("sessions.spanner.go unexpectedly imports github.com/google/uuid for nullable-only UUID fields")
+	}
+
+	runGoTestDir(t, outDir)
+}
+
 func TestGenerator_Generate_CommitTimestampHelpers(t *testing.T) {
 	ddl := `CREATE TABLE Runs (
 		run_id INT64 NOT NULL,

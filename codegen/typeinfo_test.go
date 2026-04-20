@@ -18,6 +18,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/cloudspannerecosystem/memefish/ast"
 	"github.com/google/go-cmp/cmp"
 )
 
@@ -149,6 +150,31 @@ func TestGoTypeForSpannerTypeString(t *testing.T) {
 				Imports:         []ImportSpec{{Path: "time"}},
 			},
 		},
+		"success: UUID not null": {
+			spannerType: "UUID",
+			want: goTypeInfo{
+				Expr:            "uuid.UUID",
+				BaseSpannerType: "UUID",
+				Imports:         []ImportSpec{{Path: "github.com/google/uuid"}},
+			},
+		},
+		"success: UUID nullable": {
+			spannerType: "UUID",
+			nullable:    true,
+			want: goTypeInfo{
+				Expr:            "spanner.NullUUID",
+				BaseSpannerType: "UUID",
+			},
+		},
+		"success: UUID array": {
+			spannerType: "ARRAY<UUID>",
+			want: goTypeInfo{
+				Expr:            "[]uuid.UUID",
+				BaseSpannerType: "UUID",
+				IsArray:         true,
+				Imports:         []ImportSpec{{Path: "github.com/google/uuid"}},
+			},
+		},
 		"success: opaque type falls back to generic column value": {
 			spannerType: "STRUCT<>",
 			want: goTypeInfo{
@@ -179,6 +205,39 @@ func TestGoTypeForSpannerTypeString(t *testing.T) {
 			}
 			if diff := cmp.Diff(tt.want, got); diff != "" {
 				t.Fatalf("goTypeForSpannerTypeString(%q, %v) mismatch (-want +got):\n%s", tt.spannerType, tt.nullable, diff)
+			}
+		})
+	}
+}
+
+func TestGoTypeForSchemaType_UUIDCompat(t *testing.T) {
+	tests := map[string]struct {
+		schemaType ast.SchemaType
+		nullable   bool
+		want       goTypeInfo
+	}{
+		"named type compatibility": {
+			schemaType: &ast.NamedType{Path: []*ast.Ident{{Name: "UUID"}}},
+			want: goTypeInfo{
+				Expr:            "uuid.UUID",
+				BaseSpannerType: "UUID",
+				Imports:         []ImportSpec{{Path: "github.com/google/uuid"}},
+			},
+		},
+		"scalar type compatibility": {
+			schemaType: &ast.ScalarSchemaType{Name: ast.ScalarTypeName("UUID")},
+			nullable:   true,
+			want: goTypeInfo{
+				Expr:            "spanner.NullUUID",
+				BaseSpannerType: "UUID",
+			},
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			if diff := cmp.Diff(tt.want, goTypeForSchemaType(tt.schemaType, tt.nullable)); diff != "" {
+				t.Fatalf("goTypeForSchemaType() mismatch (-want +got):\n%s", diff)
 			}
 		})
 	}

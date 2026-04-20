@@ -1503,12 +1503,47 @@ func TestDiff_HelperCoverage(t *testing.T) {
 			{ast.NumericTypeName, `NUMERIC "0"`},
 			{ast.JSONTypeName, `JSON "{}"`},
 			{ast.TokenListTypeName, `b""`},
+			{ast.ScalarTypeName("UUID"), `NEW_UUID()`},
 		}
 
 		for _, tt := range tests {
 			if got := defaultByScalarTypeName(tt.name).SQL(); got != tt.want {
 				t.Fatalf("defaultByScalarTypeName(%s) = %q, want %q", tt.name, got, tt.want)
 			}
+		}
+	})
+
+	t.Run("uuid add not null column uses cast default", func(t *testing.T) {
+		from := mustParseDatabaseFromString(t, `CREATE TABLE t1 (id INT64 NOT NULL) PRIMARY KEY(id);`)
+		to := mustParseDatabaseFromString(t, `CREATE TABLE t1 (id INT64 NOT NULL, uuid_id UUID NOT NULL) PRIMARY KEY(id);`)
+		stmts, err := Diff(from, to)
+		if err != nil {
+			t.Fatalf("Diff() error = %v", err)
+		}
+		got := statementsToStrings(stmts)
+		want := []string{
+			`ALTER TABLE t1 ADD COLUMN uuid_id UUID NOT NULL DEFAULT (NEW_UUID())`,
+			`ALTER TABLE t1 ALTER COLUMN uuid_id DROP DEFAULT`,
+		}
+		if diff := cmp.Diff(want, got); diff != "" {
+			t.Fatalf("uuid add-column statements mismatch (-want +got):\n%s", diff)
+		}
+	})
+
+	t.Run("uuid set not null backfills with new uuid", func(t *testing.T) {
+		from := mustParseDatabaseFromString(t, `CREATE TABLE t1 (id INT64 NOT NULL, uuid_id UUID) PRIMARY KEY(id);`)
+		to := mustParseDatabaseFromString(t, `CREATE TABLE t1 (id INT64 NOT NULL, uuid_id UUID NOT NULL) PRIMARY KEY(id);`)
+		stmts, err := Diff(from, to)
+		if err != nil {
+			t.Fatalf("Diff() error = %v", err)
+		}
+		got := statementsToStrings(stmts)
+		want := []string{
+			`UPDATE t1 SET uuid_id = NEW_UUID() WHERE uuid_id IS NULL`,
+			`ALTER TABLE t1 ALTER COLUMN uuid_id UUID NOT NULL`,
+		}
+		if diff := cmp.Diff(want, got); diff != "" {
+			t.Fatalf("uuid set-not-null statements mismatch (-want +got):\n%s", diff)
 		}
 	})
 
@@ -1736,4 +1771,12 @@ CREATE SEARCH INDEX sidx ON t1(name) STORING (id);
 			t.Fatalf("hasPrivilegeOnColumn(missing) = true, want false")
 		}
 	})
+}
+
+func statementsToStrings(stmts []Statement) []string {
+	out := make([]string, len(stmts))
+	for i, stmt := range stmts {
+		out[i] = stmt.SQL
+	}
+	return out
 }

@@ -32,6 +32,11 @@ func ParseStatements(sql string) ([]ast.Statement, error) {
 	return memefish.ParseStatements("", sql)
 }
 
+// ParseExpr parses a SQL expression and returns the AST node.
+func ParseExpr(sql string) (ast.Expr, error) {
+	return memefish.ParseExpr("", sql)
+}
+
 // SplitStatements splits raw SQL text at semicolons and returns the individual statement strings.
 // Unlike ParseStatements, this does not fully parse the SQL — it only splits on statement boundaries.
 func SplitStatements(sql string) ([]string, error) {

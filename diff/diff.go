@@ -116,6 +116,11 @@ func (u updateDML) defaultValue() ast.Expr {
 		return defaultByScalarTypeName(t.Name)
 	case *ast.SizedSchemaType:
 		return defaultByScalarTypeName(t.Name)
+	case *ast.NamedType:
+		if isUUIDNamedType(t) {
+			return uuidDefaultExpr()
+		}
+		return &ast.StringLiteral{Value: ""}
 	default:
 		return &ast.StringLiteral{Value: ""}
 	}
@@ -1084,6 +1089,9 @@ func optionValueByName(options *ast.Options, name string) ast.Expr {
 }
 
 func defaultByScalarTypeName(name ast.ScalarTypeName) ast.Expr {
+	if isUUIDScalarTypeName(name) {
+		return uuidDefaultExpr()
+	}
 	switch name {
 	case ast.BoolTypeName:
 		return &ast.BoolLiteral{Value: false}
@@ -1110,6 +1118,22 @@ func defaultByScalarTypeName(name ast.ScalarTypeName) ast.Expr {
 	}
 }
 
+func uuidDefaultExpr() ast.Expr {
+	expr, err := sqlutil.ParseExpr(`NEW_UUID()`)
+	if err != nil {
+		panic(fmt.Sprintf("parsing UUID default expression: %v", err))
+	}
+	return expr
+}
+
+func isUUIDScalarTypeName(name ast.ScalarTypeName) bool {
+	return strings.EqualFold(string(name), "UUID")
+}
+
+func isUUIDNamedType(t *ast.NamedType) bool {
+	return t != nil && len(t.Path) == 1 && strings.EqualFold(t.Path[0].Name, "UUID")
+}
+
 func (g *generator) columnEqual(x, y *Column) bool {
 	return strings.EqualFold(x.Key, y.Key) &&
 		x.Type == y.Type &&
@@ -1129,6 +1153,10 @@ func (g *generator) setDefaultSemantics(col *ast.ColumnDef) *ast.ColumnDef {
 		columnCopy.DefaultSemantics = &ast.ColumnDefaultExpr{Expr: defaultByScalarTypeName(t.Name)}
 	case *ast.SizedSchemaType:
 		columnCopy.DefaultSemantics = &ast.ColumnDefaultExpr{Expr: defaultByScalarTypeName(t.Name)}
+	case *ast.NamedType:
+		if isUUIDNamedType(t) {
+			columnCopy.DefaultSemantics = &ast.ColumnDefaultExpr{Expr: uuidDefaultExpr()}
+		}
 	}
 	return &columnCopy
 }
