@@ -25,7 +25,7 @@ import (
 	"text/template"
 
 	"golang.org/x/tools/imports"
-	gofumptformat "mvdan.cc/gofumpt/format"
+	gofumpt "mvdan.cc/gofumpt/format"
 )
 
 const (
@@ -351,7 +351,7 @@ func (g *Generator) formatGoSource(src []byte) []byte {
 		return src
 	}
 
-	formatted, err = gofumptformat.Source(formatted, gofumptformat.Options{
+	formatted, err = gofumpt.Source(formatted, gofumpt.Options{
 		ModulePath:  modulePath,
 		LangVersion: langVersion,
 	})
