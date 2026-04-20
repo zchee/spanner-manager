@@ -3,6 +3,10 @@ import (
 	"encoding/json"
 
 	"cloud.google.com/go/spanner"
+	"github.com/google/uuid"
+	"google.golang.org/api/iterator"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 // SpannerDB is the common interface for spanner operations.
@@ -158,5 +162,98 @@ func unmarshalJSONValue[T any](dst *T, valid *bool, payload []byte) error {
 	}
 	*dst = decoded
 	*valid = true
+	return nil
+}
+
+// encodeAny encodes primitive types that spanner library does not support into spanner types before
+// passing to spanner functions.
+//
+// Suppotted primitive types and user defined types that implement [spanner.Encoder] interface are
+// handled in encoding phase inside spanner libirary.
+func encodeAny(v any) any {
+	switch v.(type) {
+	case int8, uint8, int16, uint16, int32, uint32, uint64:
+		return &primitiveEncoderDecoder{val: v}
+	default:
+		return v
+	}
+}
+
+// decodeAny wraps primitive types that spanner library does not support to decode from spanner types
+// by yoPrimitiveDecoder before passing to spanner functions.
+//
+// Supported primitive types and user defined types that implement [spanner.Decoder] interface are
+// handled in decoding phase inside spanner libirary.
+func decodeAny(ptr any) any {
+	switch ptr.(type) {
+	case *int8, *uint8, *int16, *uint16, *int32, *uint32, *uint64:
+		return &primitiveEncoderDecoder{val: ptr}
+	default:
+		return ptr
+	}
+}
+
+type primitiveEncoderDecoder struct {
+	val any
+}
+
+var (
+	_ spanner.Encoder = (*primitiveEncoderDecoder)(nil)
+	_ spanner.Decoder = (*primitiveEncoderDecoder)(nil)
+)
+
+// EncodeSpanner implements [spanner.Encoder].
+func (d primitiveEncoderDecoder) EncodeSpanner() (any, error) {
+	switch vv := d.val.(type) {
+	case int8:
+		return int64(vv), nil
+	case uint8:
+		return int64(vv), nil
+	case int16:
+		return int64(vv), nil
+	case uint16:
+		return int64(vv), nil
+	case int32:
+		return int64(vv), nil
+	case uint32:
+		return int64(vv), nil
+	case uint64:
+		return int64(vv), nil
+	default:
+		return d.val, nil
+	}
+}
+
+// DecodeSpanner implements [spanner.Decoder].
+func (d *primitiveEncoderDecoder) DecodeSpanner(val any) error {
+	strVal, ok := val.(string)
+	if !ok {
+		return spanner.ToSpannerError(status.Errorf(codes.FailedPrecondition, "failed to decode customField: %[1]T: %[1]v", val))
+	}
+
+	intVal, err := strconv.ParseInt(strVal, 10, 64)
+	if err != nil {
+		return spanner.ToSpannerError(status.Errorf(codes.FailedPrecondition, "%v wasn't correctly encoded: %v", val, err))
+	}
+
+	switch vv := d.val.(type) {
+	case *int8:
+		*vv = int8(intVal)
+	case *uint8:
+		*vv = uint8(intVal)
+	case *int16:
+		*vv = int16(intVal)
+	case *uint16:
+		*vv = uint16(intVal)
+	case *int32:
+		*vv = int32(intVal)
+	case *uint32:
+		*vv = uint32(intVal)
+	case *uint64:
+		*vv = uint64(intVal)
+	default:
+		return status.Errorf(codes.Internal, "unexpected type for primitiveEncoderDecoder: %T", d.val)
+	}
+
 	return nil
 }
