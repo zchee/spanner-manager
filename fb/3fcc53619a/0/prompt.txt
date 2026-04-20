@@ -1,0 +1,1 @@
+$autopilot "The @codegen/languages/go/templates/header.go.tmpl is the template for the header part of each generated file. There is no need to generate `spanner_header.spanner.go`. fix that behavior"

@@ -1,0 +1,30 @@
+{
+  "cli_version": "dev",
+  "checkpoint_id": "fb3fcc53619a",
+  "strategy": "manual-commit",
+  "branch": "support-uuid",
+  "checkpoints_count": 1,
+  "files_touched": [
+    "README.md",
+    "codegen/generator.go",
+    "codegen/generator_test.go",
+    "codegen/languages/go/templates/header.go.tmpl",
+    "codegen/languages/go/templates/spanner_db.go.tmpl",
+    "codegen/languages/go/templates/type.go.tmpl"
+  ],
+  "sessions": [
+    {
+      "metadata": "/fb/3fcc53619a/0/metadata.json",
+      "transcript": "/fb/3fcc53619a/0/full.jsonl",
+      "content_hash": "/fb/3fcc53619a/0/content_hash.txt",
+      "prompt": "/fb/3fcc53619a/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 10047327,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 9716608,
+    "output_tokens": 80048,
+    "api_call_count": 91
+  }
+}
