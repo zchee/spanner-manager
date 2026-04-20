@@ -1513,6 +1513,17 @@ func TestDiff_HelperCoverage(t *testing.T) {
 		}
 	})
 
+	t.Run("uuidDefaultExpr reuses parsed expression", func(t *testing.T) {
+		first := uuidDefaultExpr()
+		second := uuidDefaultExpr()
+		if first != second {
+			t.Fatalf("uuidDefaultExpr() did not reuse the parsed expression instance")
+		}
+		if got := first.SQL(); got != "NEW_UUID()" {
+			t.Fatalf("uuidDefaultExpr().SQL() = %q, want %q", got, "NEW_UUID()")
+		}
+	})
+
 	t.Run("uuid add not null column uses cast default", func(t *testing.T) {
 		from := mustParseDatabaseFromString(t, `CREATE TABLE t1 (id INT64 NOT NULL) PRIMARY KEY(id);`)
 		to := mustParseDatabaseFromString(t, `CREATE TABLE t1 (id INT64 NOT NULL, uuid_id UUID NOT NULL) PRIMARY KEY(id);`)

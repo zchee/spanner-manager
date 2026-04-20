@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"reflect"
 	"strings"
+	"sync"
 
 	"github.com/cloudspannerecosystem/memefish/ast"
 
@@ -29,6 +30,10 @@ type Statement struct {
 	Kind sqlutil.StatementKind
 	SQL  string
 }
+
+var defaultUUIDExprOnce = sync.OnceValues(func() (ast.Expr, error) {
+	return sqlutil.ParseExpr("NEW_UUID()")
+})
 
 // Diff compares two Database schemas and returns the DDL statements needed
 // to migrate from 'from' to 'to'.
@@ -1119,9 +1124,9 @@ func defaultByScalarTypeName(name ast.ScalarTypeName) ast.Expr {
 }
 
 func uuidDefaultExpr() ast.Expr {
-	expr, err := sqlutil.ParseExpr(`NEW_UUID()`)
+	expr, err := defaultUUIDExprOnce()
 	if err != nil {
-		panic(fmt.Sprintf("parsing UUID default expression: %v", err))
+		panic(fmt.Sprintf("parsing %q expression: %v", "NEW_UUID()", err))
 	}
 	return expr
 }
