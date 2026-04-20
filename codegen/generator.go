@@ -24,6 +24,7 @@ import (
 	"strings"
 	"text/template"
 
+	"golang.org/x/tools/imports"
 	gofumptformat "mvdan.cc/gofumpt/format"
 )
 
@@ -339,7 +340,18 @@ func (g *Generator) writeTemplate(filename, templateName string, data any) error
 
 func (g *Generator) formatGoSource(src []byte) []byte {
 	modulePath, langVersion := detectGoModuleConfig(g.opts.OutDir)
-	formatted, err := gofumptformat.Source(src, gofumptformat.Options{
+	formatted, err := imports.Process("", src, &imports.Options{
+		TabWidth:  8,
+		TabIndent: true,
+		Comments:  true,
+		Fragment:  true,
+	})
+	if err != nil {
+		// Write unformatted on format error for debugging.
+		return src
+	}
+
+	formatted, err = gofumptformat.Source(formatted, gofumptformat.Options{
 		ModulePath:  modulePath,
 		LangVersion: langVersion,
 	})
@@ -347,6 +359,7 @@ func (g *Generator) formatGoSource(src []byte) []byte {
 		// Write unformatted on format error for debugging.
 		return src
 	}
+
 	return formatted
 }
 
