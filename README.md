@@ -1,5 +1,8 @@
 # spanner-manager
 
+[![Test](https://github.com/zchee/spanner-manager/actions/workflows/test.yaml/badge.svg)](https://github.com/zchee/spanner-manager/actions/workflows/test.yaml)
+[![codecov](https://codecov.io/github/zchee/spanner-manager/graph/badge.svg?token=cpoqSGB5FL)](https://codecov.io/github/zchee/spanner-manager)
+
 Unified CLI for Cloud Spanner schema migration, schema diffing, and Go ORM code generation.
 
 Replaces three separate tools ([wrench](https://github.com/cloudspannerecosystem/wrench), [hammer](https://github.com/daichirata/hammer), [yo](https://github.com/cloudspannerecosystem/yo)) with a single binary, shared connection management, and a common SQL parser powered by [memefish](https://github.com/cloudspannerecosystem/memefish).
