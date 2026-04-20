@@ -3,7 +3,7 @@
   "checkpoint_id": "7bede3dd3379",
   "session_id": "019daa6b-c04e-7f53-be69-e2532b570c94",
   "strategy": "manual-commit",
-  "created_at": "2026-04-20T23:50:57.060397Z",
+  "created_at": "2026-04-20T23:55:01.773348Z",
   "branch": "perf",
   "checkpoints_count": 0,
   "files_touched": [
@@ -16,7 +16,7 @@
   "checkpoint_transcript_start": 14,
   "transcript_lines_at_start": 14,
   "initial_attribution": {
-    "calculated_at": "2026-04-20T23:50:57.049899Z",
+    "calculated_at": "2026-04-20T23:55:01.763848Z",
     "agent_lines": 1,
     "agent_removed": 0,
     "human_added": 0,
