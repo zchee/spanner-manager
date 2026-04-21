@@ -335,7 +335,7 @@ func (g *Generator) writeTemplate(filename, templateName string, data any) error
 
 	// Format Go code.
 	if g.opts.Language == "go" {
-		formatted := g.formatGoSource(buf.Bytes())
+		formatted := g.formatGoSource(filename, buf.Bytes())
 		buf.Reset()
 		buf.Write(formatted)
 	}
@@ -611,10 +611,14 @@ func joinGeneratedSections(parts ...[]byte) []byte {
 	return bytes.Join(trimmed, []byte("\n\n"))
 }
 
-func (g *Generator) formatGoSource(src []byte) []byte {
+func (g *Generator) formatGoSource(filename string, src []byte) []byte {
 	modulePath, langVersion := detectGoModuleConfig(g.opts.OutDir)
 	imports.LocalPrefix = modulePath
-	formatted, err := imports.Process("", src, &imports.Options{
+	generatedFile := filepath.Join(g.opts.OutDir, filename)
+	if absPath, err := filepath.Abs(generatedFile); err == nil {
+		generatedFile = absPath
+	}
+	formatted, err := imports.Process(generatedFile, src, &imports.Options{
 		TabWidth:  8,
 		TabIndent: true,
 		Comments:  true,
