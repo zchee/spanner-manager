@@ -54,8 +54,7 @@ func (e spannerError) Unwrap() error {
 // If the error is originated from the Spanner library, this returns a gRPC status of
 // the original error. It may contain details of the status such as RetryInfo.
 func (e spannerError) GRPCStatus() *status.Status {
-	var ae *apierror.APIError
-	if errors.As(e.err, &ae) {
+	if ae, ok := errors.AsType[*apierror.APIError](e.err); ok {
 		return status.Convert(ae)
 	}
 
