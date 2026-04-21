@@ -7,3 +7,7 @@ $autopilot "Fix `go test -v -race -count=1 -shuffle=on -run=. ./...` all errors"
 ---
 
 $autopilot "The `runGoTestDir` function will adding `github.com/go-json-experiment/json` to go.mod when running go test, but actually spanner-manager not depends that. Change test case logic to don't affected spanner-manager go.mod"
+
+---
+
+$commit
