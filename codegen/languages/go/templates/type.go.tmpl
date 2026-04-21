@@ -46,11 +46,9 @@ func (t *{{ .Type.Name }}) columnsToPtrs(cols []string) ([]any, error) {
 	ret := make([]any, 0, len(cols))
 	for _, col := range cols {
 		switch col {
-{{- range .Fields }}
-	{{- if not .IsHidden }}
+{{- range .Type.Fields }}
 		case "{{ .ColumnName }}":
 			ret = append(ret, decodeAny(&t.{{ .Name }}))
-	{{- end }}
 {{- end }}
 		default:
 			return nil, fmt.Errorf("unknown column: %s", col)
@@ -63,11 +61,9 @@ func (t *{{ .Type.Name }}) columnsToValues(cols []string) ([]any, error) {
 	ret := make([]any, 0, len(cols))
 	for _, col := range cols {
 		switch col {
-{{- range .Fields }}
-	{{- if not .IsHidden }}
+{{- range .Type.Fields }}
 		case "{{ .ColumnName }}":
 			ret = append(ret, encodeAny(t.{{ .Name }}))
-	{{- end }}
 {{- end }}
 		default:
 			return nil, fmt.Errorf("unknown column: %s", col)

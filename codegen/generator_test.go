@@ -101,6 +101,32 @@ func TestGenerator_Generate_BasicFiles(t *testing.T) {
 	}
 }
 
+func TestGenerator_Generate_ColumnSwitches(t *testing.T) {
+	root := newCompileFixtureRoot(t)
+	outDir := generateFromDDL(t, root, `CREATE TABLE Users (
+		user_id INT64 NOT NULL,
+		name STRING(MAX) NOT NULL,
+	) PRIMARY KEY (user_id)`, Options{PackageName: "models"})
+	content := readTextFile(t, filepath.Join(outDir, "users.spanner.go"))
+
+	tests := map[string]string{
+		"columnsToPtrs user_id":   "case \"user_id\":\n\t\t\tret = append(ret, decodeAny(&t.UserID))",
+		"columnsToPtrs name":      "case \"name\":\n\t\t\tret = append(ret, decodeAny(&t.Name))",
+		"columnsToValues user_id": "case \"user_id\":\n\t\t\tret = append(ret, encodeAny(t.UserID))",
+		"columnsToValues name":    "case \"name\":\n\t\t\tret = append(ret, encodeAny(t.Name))",
+	}
+
+	for name, want := range tests {
+		t.Run(name, func(t *testing.T) {
+			if !strings.Contains(content, want) {
+				t.Fatalf("users.spanner.go missing %q\n%s", want, content)
+			}
+		})
+	}
+
+	runGoTestDir(t, outDir)
+}
+
 func TestGenerator_Generate_RemovesLegacyHeaderFile(t *testing.T) {
 	typ := Type{
 		Name:  "Users",
