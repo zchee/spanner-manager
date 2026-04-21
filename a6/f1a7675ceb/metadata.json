@@ -1,0 +1,19 @@
+{
+  "cli_version": "dev",
+  "checkpoint_id": "a6f1a7675ceb",
+  "strategy": "manual-commit",
+  "branch": "perf",
+  "checkpoints_count": 0,
+  "files_touched": [
+    "codegen/generator_test.go",
+    "codegen/languages/go/templates/type.go.tmpl"
+  ],
+  "sessions": [
+    {
+      "metadata": "/a6/f1a7675ceb/0/metadata.json",
+      "transcript": "/a6/f1a7675ceb/0/full.jsonl",
+      "content_hash": "/a6/f1a7675ceb/0/content_hash.txt",
+      "prompt": ""
+    }
+  ]
+}
