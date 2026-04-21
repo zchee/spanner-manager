@@ -1,0 +1,90 @@
+{
+  "cli_version": "dev",
+  "checkpoint_id": "7775b12a246e",
+  "session_id": "019dad6e-bef6-74e2-af30-a8a14fc2b3f4",
+  "strategy": "manual-commit",
+  "created_at": "2026-04-21T09:01:57.409354Z",
+  "branch": "perf",
+  "checkpoints_count": 2,
+  "files_touched": [
+    "codegen/generator_test.go"
+  ],
+  "agent": "Codex",
+  "model": "gpt-5.4",
+  "turn_id": "6f059a4b42e3",
+  "checkpoint_transcript_start": 1376,
+  "transcript_lines_at_start": 1376,
+  "token_usage": {
+    "input_tokens": 26146517,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 25494272,
+    "output_tokens": 33452,
+    "api_call_count": 51
+  },
+  "session_metrics": {
+    "turn_count": 3
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-04-21T09:01:57.333017Z",
+    "agent_lines": 24,
+    "agent_removed": 5,
+    "human_added": 0,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 24,
+    "total_lines_changed": 29,
+    "agent_percentage": 100,
+    "metric_version": 2
+  },
+  "prompt_attributions": [
+    {
+      "checkpoint_number": 1,
+      "user_lines_added": 593,
+      "user_lines_removed": 0,
+      "agent_lines_added": 0,
+      "agent_lines_removed": 0,
+      "user_added_per_file": {
+        ".agent/PLANS.md": 243,
+        ".agents/plans/improve-codegen.md": 204,
+        ".envrc": 1,
+        ".omc/project-memory.json": 129,
+        ".omc/sessions/37eaa247-a76a-49bf-9ead-416b244fa606.json": 8,
+        ".omc/sessions/88b550f6-9671-4b51-b9cb-7aa11ae89b04.json": 8
+      }
+    },
+    {
+      "checkpoint_number": 2,
+      "user_lines_added": 595,
+      "user_lines_removed": 6,
+      "agent_lines_added": 11,
+      "agent_lines_removed": 7,
+      "user_added_per_file": {
+        ".agent/PLANS.md": 243,
+        ".agents/plans/improve-codegen.md": 204,
+        ".envrc": 1,
+        ".omc/project-memory.json": 129,
+        ".omc/sessions/37eaa247-a76a-49bf-9ead-416b244fa606.json": 8,
+        ".omc/sessions/88b550f6-9671-4b51-b9cb-7aa11ae89b04.json": 8,
+        "go.mod": 2
+      },
+      "user_removed_per_file": {
+        "go.mod": 6
+      }
+    },
+    {
+      "checkpoint_number": 3,
+      "user_lines_added": 593,
+      "user_lines_removed": 0,
+      "agent_lines_added": 24,
+      "agent_lines_removed": 5,
+      "user_added_per_file": {
+        ".agent/PLANS.md": 243,
+        ".agents/plans/improve-codegen.md": 204,
+        ".envrc": 1,
+        ".omc/project-memory.json": 129,
+        ".omc/sessions/37eaa247-a76a-49bf-9ead-416b244fa606.json": 8,
+        ".omc/sessions/88b550f6-9671-4b51-b9cb-7aa11ae89b04.json": 8
+      }
+    }
+  ]
+}
