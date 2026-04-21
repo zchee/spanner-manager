@@ -15,7 +15,7 @@ type {{ .Type.Name }} struct {
 {{- end }}
 }
 
-// {{ .Type.Name }}PrimaryKeys returns the primary key columns.
+// {{ .Type.Name }}PrimaryKeys returns the primary key columns for [{{ .Type.Name }}].
 func {{ .Type.Name }}PrimaryKeys() []string {
 	return []string{
 {{- range .Type.PrimaryKeyFields }}
@@ -24,7 +24,7 @@ func {{ .Type.Name }}PrimaryKeys() []string {
 	}
 }
 
-// {{ .Type.Name }}Columns returns the columns for {{ .Type.Name }}.
+// {{ .Type.Name }}Columns returns the columns for [{{ .Type.Name }}].
 func {{ .Type.Name }}Columns() []string {
 	return []string{
 {{- range .Type.Fields }}
@@ -33,7 +33,7 @@ func {{ .Type.Name }}Columns() []string {
 	}
 }
 
-// {{ .Type.Name }}WritableColumns returns the writable columns for {{ .Type.Name }}.
+// {{ .Type.Name }}WritableColumns returns the writable columns for [{{ .Type.Name }}].
 func {{ .Type.Name }}WritableColumns() []string {
 	return []string{
 {{- range .Type.WritableFields }}
@@ -73,7 +73,7 @@ func (t *{{ .Type.Name }}) columnsToValues(cols []string) ([]any, error) {
 }
 
 // new{{ .Type.Name }}Decoder returns a decoder which reads a row from [*spanner.Row]
-// into {{ .Type.Name }}.
+// into [{{ .Type.Name }}].
 //
 // The decoder is not goroutine-safe. Don't use it concurrently.
 func new{{ .Type.Name }}Decoder(cols []string) func(*spanner.Row) (*{{ .Type.Name }}, error) {
@@ -100,38 +100,38 @@ func (t *{{ .Type.Name }}) values(cols []string) []any {
 	return values
 }
 
-// Insert returns a Mutation to insert a row into {{ .Type.Table }}.
+// Insert returns a [*spanner.Mutation] to insert a row into [{{ .Type.Table }}].
 func (t *{{ .Type.Name }}) Insert() *spanner.Mutation {
 	writableCols := {{ .Type.Name }}WritableColumns()
 	return spanner.Insert("{{ .Type.Table }}", writableCols, t.values(writableCols))
 }
 
-// Update returns a Mutation to update a row in {{ .Type.Table }}.
+// Update returns a [*spanner.Mutation] to update a row in [{{ .Type.Table }}].
 func (t *{{ .Type.Name }}) Update() *spanner.Mutation {
 	writableCols := {{ .Type.Name }}WritableColumns()
 	return spanner.Update("{{ .Type.Table }}", writableCols, t.values(writableCols))
 }
 
-// InsertOrUpdate returns a Mutation to insert or update a row in {{ .Type.Table }}.
+// InsertOrUpdate returns a [*spanner.Mutation] to insert or update a row in [{{ .Type.Table }}].
 func (t *{{ .Type.Name }}) InsertOrUpdate() *spanner.Mutation {
 	writableCols := {{ .Type.Name }}WritableColumns()
 	return spanner.InsertOrUpdate("{{ .Type.Table }}", writableCols, t.values(writableCols))
 }
 
-// Replace returns a Mutation to insert a row into a table, deleting any
-// existing row in {{ .Type.Table }}. Unlike InsertOrUpdate, this means any values not explicitly
+// Replace returns a [*spanner.Mutation] to insert a row into a table, deleting any
+// existing row in [{{ .Type.Table }}]. Unlike InsertOrUpdate, this means any values not explicitly
 // written become NULL.
 func (t *{{ .Type.Name }}) Replace() *spanner.Mutation {
 	writableCols := {{ .Type.Name }}WritableColumns()
 	return spanner.Replace("{{ .Type.Table }}", writableCols, t.values(writableCols))
 }
 
-// Delete returns a Mutation to delete the {{ .Type.Name }} row.
+// Delete returns a [*spanner.Mutation] to delete the [{{ .Type.Name }}] row.
 func (t *{{ .Type.Name }}) Delete() *spanner.Mutation {
 	return spanner.Delete("{{ .Type.Table }}", spanner.Key(t.values({{ .Type.Name }}PrimaryKeys())))
 }
 
-// Find{{ .Type.Name }}ByPrimaryKey finds a {{ .Type.Name }} by its primary key.
+// Find{{ .Type.Name }}ByPrimaryKey finds a [{{ .Type.Name }}] by its primary key.
 func Find{{ .Type.Name }}ByPrimaryKey(ctx context.Context, db SpannerDB{{ range .Type.PrimaryKeyFields }}, {{ .Name | lowerFirst }} {{ .GoType }}{{ end }}) (*{{ .Type.Name }}, error) {
 	key := spanner.Key{
 {{- range .Type.PrimaryKeyFields }}
@@ -155,7 +155,7 @@ func Find{{ .Type.Name }}ByPrimaryKey(ctx context.Context, db SpannerDB{{ range 
 	return t, nil
 }
 
-// Read{{ .Type.Name }} retrieves multiples rows from {{ .Type.Name }} by KeySet as a slice.
+// Read{{ .Type.Name }} retrieves multiples rows from [{{ .Type.Name }}] by [spanner.KeySet] as a slice.
 func Read{{ .Type.Name }}(ctx context.Context, db SpannerDB, keys spanner.KeySet) ([]*{{ .Type.Name }}, error) {
 	var res []*{{ .Type.Name }}
 

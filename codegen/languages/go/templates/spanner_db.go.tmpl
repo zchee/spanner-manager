@@ -1,8 +1,8 @@
 import (
 	"context"
-	"encoding/json"
 
 	"cloud.google.com/go/spanner"
+	"github.com/go-json-experiment/json"
 	"github.com/google/uuid"
 	"github.com/googleapis/gax-go/v2/apierror"
 	"google.golang.org/api/iterator"
@@ -75,7 +75,7 @@ func NewJSONString[T any](value T) JSONString[T] {
 	}
 }
 
-// EncodeSpanner implements spanner.Encoder.
+// EncodeSpanner implements [spanner.Encoder].
 func (v JSONString[T]) EncodeSpanner() (any, error) {
 	if !v.Valid {
 		return spanner.NullString{}, nil
@@ -87,7 +87,7 @@ func (v JSONString[T]) EncodeSpanner() (any, error) {
 	return spanner.NullString{StringVal: string(payload), Valid: true}, nil
 }
 
-// DecodeSpanner implements spanner.Decoder.
+// DecodeSpanner implements [spanner.Decoder].
 func (v *JSONString[T]) DecodeSpanner(input any) error {
 	return decodeJSONValue(&v.Value, &v.Valid, input)
 }
@@ -97,7 +97,7 @@ func (v JSONString[T]) IsNull() bool {
 	return !v.Valid
 }
 
-// MarshalJSON implements json.Marshaler.
+// MarshalJSON implements [json.Marshaler].
 func (v JSONString[T]) MarshalJSON() ([]byte, error) {
 	if !v.Valid {
 		return []byte("null"), nil
@@ -105,7 +105,7 @@ func (v JSONString[T]) MarshalJSON() ([]byte, error) {
 	return json.Marshal(v.Value)
 }
 
-// UnmarshalJSON implements json.Unmarshaler.
+// UnmarshalJSON implements [json.Unmarshaler].
 func (v *JSONString[T]) UnmarshalJSON(payload []byte) error {
 	return unmarshalJSONValue(&v.Value, &v.Valid, payload)
 }
@@ -124,7 +124,7 @@ func NewJSONValue[T any](value T) JSONValue[T] {
 	}
 }
 
-// EncodeSpanner implements spanner.Encoder.
+// EncodeSpanner implements [spanner.Encoder].
 func (v JSONValue[T]) EncodeSpanner() (any, error) {
 	if !v.Valid {
 		return spanner.NullJSON{}, nil
@@ -132,7 +132,7 @@ func (v JSONValue[T]) EncodeSpanner() (any, error) {
 	return spanner.NullJSON{Value: v.Value, Valid: true}, nil
 }
 
-// DecodeSpanner implements spanner.Decoder.
+// DecodeSpanner implements [spanner.Decoder].
 func (v *JSONValue[T]) DecodeSpanner(input any) error {
 	return decodeJSONValue(&v.Value, &v.Valid, input)
 }
@@ -142,7 +142,7 @@ func (v JSONValue[T]) IsNull() bool {
 	return !v.Valid
 }
 
-// MarshalJSON implements json.Marshaler.
+// MarshalJSON implements [json.Marshaler].
 func (v JSONValue[T]) MarshalJSON() ([]byte, error) {
 	if !v.Valid {
 		return []byte("null"), nil
@@ -150,7 +150,7 @@ func (v JSONValue[T]) MarshalJSON() ([]byte, error) {
 	return json.Marshal(v.Value)
 }
 
-// UnmarshalJSON implements json.Unmarshaler.
+// UnmarshalJSON implements [json.Unmarshaler].
 func (v *JSONValue[T]) UnmarshalJSON(payload []byte) error {
 	return unmarshalJSONValue(&v.Value, &v.Valid, payload)
 }
