@@ -1,0 +1,26 @@
+{
+  "cli_version": "dev",
+  "checkpoint_id": "63f3885621df",
+  "strategy": "manual-commit",
+  "checkpoints_count": 0,
+  "files_touched": [
+    "codegen/testdata/generated-1941281408/models/memberships.spanner.go",
+    "codegen/testdata/generated-1941281408/models/spanner_db.spanner.go",
+    "codegen/testdata/generated-1941281408/schema.sql"
+  ],
+  "sessions": [
+    {
+      "metadata": "/63/f3885621df/0/metadata.json",
+      "transcript": "/63/f3885621df/0/full.jsonl",
+      "content_hash": "/63/f3885621df/0/content_hash.txt",
+      "prompt": ""
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 311967,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 308352,
+    "output_tokens": 5622,
+    "api_call_count": 5
+  }
+}
