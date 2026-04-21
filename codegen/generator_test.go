@@ -110,10 +110,10 @@ func TestGenerator_Generate_ColumnSwitches(t *testing.T) {
 	content := readTextFile(t, filepath.Join(outDir, "users.spanner.go"))
 
 	tests := map[string]string{
-		"columnsToPtrs user_id":   "case \"user_id\":\n\t\t\tret = append(ret, decodeAny(&t.UserID))",
-		"columnsToPtrs name":      "case \"name\":\n\t\t\tret = append(ret, decodeAny(&t.Name))",
-		"columnsToValues user_id": "case \"user_id\":\n\t\t\tret = append(ret, encodeAny(t.UserID))",
-		"columnsToValues name":    "case \"name\":\n\t\t\tret = append(ret, encodeAny(t.Name))",
+		"columnsToPtrs user_id":   "case \"user_id\":\n\t\t\tret[i] = decodeAny(&t.UserID)",
+		"columnsToPtrs name":      "case \"name\":\n\t\t\tret[i] = decodeAny(&t.Name)",
+		"columnsToValues user_id": "case \"user_id\":\n\t\t\tret[i] = encodeAny(t.UserID)",
+		"columnsToValues name":    "case \"name\":\n\t\t\tret[i] = encodeAny(t.Name)",
 	}
 
 	for name, want := range tests {
@@ -936,10 +936,29 @@ func moduleImportPath(t *testing.T, absPath string) string {
 func runGoTestDir(t *testing.T, dir string) {
 	t.Helper()
 
-	cmd := exec.CommandContext(t.Context(), "go", "test", ".")
+	writeFixtureGoMod(t, dir)
+
+	cmd := exec.CommandContext(t.Context(), "go", "test", "-mod=mod", ".")
 	cmd.Dir = dir
+	cmd.Env = append(os.Environ(), "GOWORK=off")
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("go test . in %s failed: %v\n%s", dir, err, output)
+	}
+}
+
+func writeFixtureGoMod(t *testing.T, dir string) {
+	t.Helper()
+
+	wd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getting working directory: %v", err)
+	}
+	repoRoot := filepath.Dir(wd)
+
+	content := "module generated.test\n\ngo 1.26\n\nrequire github.com/zchee/spanner-manager v0.0.0\n\nreplace github.com/zchee/spanner-manager => " + repoRoot + "\n"
+	path := filepath.Join(dir, "go.mod")
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatalf("writing fixture go.mod %s: %v", path, err)
 	}
 }
