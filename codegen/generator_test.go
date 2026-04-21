@@ -458,10 +458,7 @@ func TestGenerator_Generate_CompositePrimaryKeyOrder(t *testing.T) {
 	}
 }`,
 		"find signature order": `func FindMembershipsByPrimaryKey(ctx context.Context, db SpannerDB, b string, a int64) (*Memberships, error)`,
-		"delete key order": `return spanner.Delete("Memberships", spanner.Key{
-		t.B,
-		t.A,
-	})`,
+		"delete key order": `return spanner.Delete("Memberships", spanner.Key(t.values(MembershipsPrimaryKeys())))`,
 	}
 	for name, want := range tests {
 		t.Run(name, func(t *testing.T) {
@@ -500,13 +497,7 @@ func TestGenerator_Generate_UUIDImportsShareThirdPartyGroup(t *testing.T) {
 	outDir := generateFromDDL(t, root, ddl, Options{PackageName: "models"})
 	content := readTextFile(t, filepath.Join(outDir, "users.spanner.go"))
 
-	const wantImportBlock = `import (
-	"context"
-	"fmt"
-
-	"cloud.google.com/go/spanner"
-	"github.com/google/uuid"
-)`
+	const wantImportBlock = "import (\n\t\"context\"\n\t\"fmt\"\n\n\t\"cloud.google.com/go/spanner\"\n\t\"github.com/google/uuid\"\n\t\"google.golang.org/grpc/codes\"\n)"
 	if !strings.Contains(content, wantImportBlock) {
 		t.Fatalf("users.spanner.go missing grouped UUID import block:\n%s", content)
 	}
@@ -557,24 +548,9 @@ func TestGenerator_Generate_WritableColumns(t *testing.T) {
 		"display_name",
 	}
 }`,
-		"insert uses writable columns": `func (t *Users) Insert() *spanner.Mutation {
-	return spanner.Insert("Users", UsersWritableColumns(), []any{
-		t.ID,
-		t.DisplayName,
-	})
-}`,
-		"update uses writable columns": `func (t *Users) Update() *spanner.Mutation {
-	return spanner.Update("Users", UsersWritableColumns(), []any{
-		t.ID,
-		t.DisplayName,
-	})
-}`,
-		"upsert uses writable columns": `func (t *Users) InsertOrUpdate() *spanner.Mutation {
-	return spanner.InsertOrUpdate("Users", UsersWritableColumns(), []any{
-		t.ID,
-		t.DisplayName,
-	})
-}`,
+		"insert uses writable columns": "func (t *Users) Insert() *spanner.Mutation {\n\twritableCols := UsersWritableColumns()\n\treturn spanner.Insert(\"Users\", writableCols, t.values(writableCols))\n}",
+		"update uses writable columns": "func (t *Users) Update() *spanner.Mutation {\n\twritableCols := UsersWritableColumns()\n\treturn spanner.Update(\"Users\", writableCols, t.values(writableCols))\n}",
+		"upsert uses writable columns": "func (t *Users) InsertOrUpdate() *spanner.Mutation {\n\twritableCols := UsersWritableColumns()\n\treturn spanner.InsertOrUpdate(\"Users\", writableCols, t.values(writableCols))\n}",
 	}
 
 	for name, want := range tests {
