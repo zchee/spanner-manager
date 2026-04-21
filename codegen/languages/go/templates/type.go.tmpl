@@ -43,12 +43,12 @@ func {{ .Type.Name }}WritableColumns() []string {
 }
 
 func (t *{{ .Type.Name }}) columnsToPtrs(cols []string) ([]any, error) {
-	ret := make([]any, 0, len(cols))
-	for _, col := range cols {
+	ret := make([]any, len(cols))
+	for i, col := range cols {
 		switch col {
 {{- range .Type.Fields }}
 		case "{{ .ColumnName }}":
-			ret = append(ret, decodeAny(&t.{{ .Name }}))
+			ret[i] = decodeAny(&t.{{ .Name }})
 {{- end }}
 		default:
 			return nil, fmt.Errorf("unknown column: %s", col)
@@ -58,12 +58,12 @@ func (t *{{ .Type.Name }}) columnsToPtrs(cols []string) ([]any, error) {
 }
 
 func (t *{{ .Type.Name }}) columnsToValues(cols []string) ([]any, error) {
-	ret := make([]any, 0, len(cols))
-	for _, col := range cols {
+	ret := make([]any, len(cols))
+	for i, col := range cols {
 		switch col {
 {{- range .Type.Fields }}
 		case "{{ .ColumnName }}":
-			ret = append(ret, encodeAny(t.{{ .Name }}))
+			ret[i] = encodeAny(t.{{ .Name }})
 {{- end }}
 		default:
 			return nil, fmt.Errorf("unknown column: %s", col)
