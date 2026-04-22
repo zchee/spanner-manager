@@ -1,0 +1,33 @@
+[OMX] worker-2 idle. Next: read worker-2's latest message/output, then assign the next concrete step or mark the task complete.. [OMX_TMUX_INJECT]
+
+---
+
+$autopilot "Fix `go test -v -race -count=1 -shuffle=on -run=. ./...` all errors"
+
+---
+
+$autopilot "The `runGoTestDir` function will adding `github.com/go-json-experiment/json` to go.mod when running go test, but actually spanner-manager not depends that. Change test case logic to don't affected spanner-manager go.mod"
+
+---
+
+$commit
+
+---
+
+$autopilot "fix all test error"
+
+---
+
+$autopilot "fix all test error"
+
+---
+
+$autopilot "fix all test error"
+
+---
+
+$autopilot "fix all test error, Don't touch codegen/typeinfo.go#IsWritable function"
+
+---
+
+$commit
