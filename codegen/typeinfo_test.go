@@ -108,7 +108,7 @@ func TestFieldIsWritable(t *testing.T) {
 		},
 		"default column": {
 			field: Field{Name: "CreatedAt", HasDefault: true},
-			want:  false,
+			want:  true,
 		},
 		"generated column": {
 			field: Field{Name: "ShardID", IsGenerated: true},
@@ -152,7 +152,7 @@ func TestRefreshTypeMetadata_PopulatesWritableFields(t *testing.T) {
 
 	refreshTypeMetadata(&typ)
 
-	if diff := cmp.Diff([]Field{typ.Fields[0], typ.Fields[1]}, typ.WritableFields); diff != "" {
+	if diff := cmp.Diff([]Field{typ.Fields[0], typ.Fields[1], typ.Fields[2]}, typ.WritableFields); diff != "" {
 		t.Fatalf("writable fields mismatch (-want +got):\n%s", diff)
 	}
 }

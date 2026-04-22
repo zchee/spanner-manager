@@ -250,6 +250,7 @@ func TestDDLFileSource_Load_WritableColumnMetadata(t *testing.T) {
 	if diff := cmp.Diff([]Field{
 		got.Fields[0],
 		got.Fields[1],
+		got.Fields[2],
 	}, got.WritableFields); diff != "" {
 		t.Fatalf("writable fields mismatch (-want +got):\n%s", diff)
 	}

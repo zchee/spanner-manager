@@ -458,7 +458,7 @@ func TestGenerator_Generate_CompositePrimaryKeyOrder(t *testing.T) {
 	}
 }`,
 		"find signature order": `func FindMembershipsByPrimaryKey(ctx context.Context, db SpannerDB, b string, a int64) (*Memberships, error)`,
-		"delete key order": `return spanner.Delete("Memberships", spanner.Key(t.values(MembershipsPrimaryKeys())))`,
+		"delete key order":     `return spanner.Delete("Memberships", spanner.Key(t.values(MembershipsPrimaryKeys())))`,
 	}
 	for name, want := range tests {
 		t.Run(name, func(t *testing.T) {
@@ -546,6 +546,7 @@ func TestGenerator_Generate_WritableColumns(t *testing.T) {
 	return []string{
 		"id",
 		"display_name",
+		"nickname",
 	}
 }`,
 		"insert uses writable columns": "func (t *Users) Insert() *spanner.Mutation {\n\twritableCols := UsersWritableColumns()\n\treturn spanner.Insert(\"Users\", writableCols, t.values(writableCols))\n}",
