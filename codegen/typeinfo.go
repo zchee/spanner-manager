@@ -199,7 +199,7 @@ func uuidGoType(nullable bool) goTypeInfo {
 }
 
 func (f Field) IsWritable() bool {
-	return !f.IsGenerated && !f.HasDefault
+	return !f.IsGenerated
 }
 
 func refreshTypeMetadata(t *Type) {
