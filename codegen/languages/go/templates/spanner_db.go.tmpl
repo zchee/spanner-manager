@@ -1,18 +1,69 @@
 import (
 	"context"
-	"encoding/json"
+	"errors"
+	"fmt"
+	"math"
+	"strconv"
 
 	"cloud.google.com/go/spanner"
+	"github.com/go-json-experiment/json"
+	"github.com/google/uuid"
+	"github.com/googleapis/gax-go/v2/apierror"
+	"google.golang.org/api/iterator"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 // SpannerDB is the common interface for spanner operations.
 type SpannerDB interface {
+	Read(ctx context.Context, table string, keys spanner.KeySet, columns []string) *spanner.RowIterator
 	ReadRow(ctx context.Context, table string, key spanner.Key, columns []string) (*spanner.Row, error)
 	Query(ctx context.Context, statement spanner.Statement) *spanner.RowIterator
 }
 
 // SpannerLog provides an optional logger for generated code.
 var SpannerLog = func(context.Context, string, ...any) {}
+
+func newError(method, table string, err error) error {
+	code := spanner.ErrCode(err)
+	return newErrorWithCode(code, method, table, err)
+}
+
+func newErrorWithCode(code codes.Code, method, table string, err error) error {
+	return &spannerError{
+		code:   code,
+		method: method,
+		table:  table,
+		err:    err,
+	}
+}
+
+type spannerError struct {
+	code   codes.Code
+	method string
+	table  string
+	err    error
+}
+
+func (e spannerError) Error() string {
+	return fmt.Sprintf("spannerError error in %s(%s): %v", e.method, e.table, e.err)
+}
+
+func (e spannerError) Unwrap() error {
+	return e.err
+}
+
+// GRPCStatus implements a conversion to a gRPC status using `status.Convert(error)`.
+//
+// If the error is originated from the Spanner library, this returns a gRPC status of
+// the original error. It may contain details of the status such as RetryInfo.
+func (e spannerError) GRPCStatus() *status.Status {
+	if ae, ok := errors.AsType[*apierror.APIError](e.err); ok {
+		return status.Convert(ae)
+	}
+
+	return status.New(e.code, e.Error())
+}
 
 // JSONString maps a STRING column that stores JSON into a typed Go value.
 type JSONString[T any] struct {
@@ -28,8 +79,8 @@ func NewJSONString[T any](value T) JSONString[T] {
 	}
 }
 
-// EncodeSpanner implements spanner.Encoder.
-func (v JSONString[T]) EncodeSpanner() (interface{}, error) {
+// EncodeSpanner implements [spanner.Encoder].
+func (v JSONString[T]) EncodeSpanner() (any, error) {
 	if !v.Valid {
 		return spanner.NullString{}, nil
 	}
@@ -40,8 +91,8 @@ func (v JSONString[T]) EncodeSpanner() (interface{}, error) {
 	return spanner.NullString{StringVal: string(payload), Valid: true}, nil
 }
 
-// DecodeSpanner implements spanner.Decoder.
-func (v *JSONString[T]) DecodeSpanner(input interface{}) error {
+// DecodeSpanner implements [spanner.Decoder].
+func (v *JSONString[T]) DecodeSpanner(input any) error {
 	return decodeJSONValue(&v.Value, &v.Valid, input)
 }
 
@@ -50,7 +101,7 @@ func (v JSONString[T]) IsNull() bool {
 	return !v.Valid
 }
 
-// MarshalJSON implements json.Marshaler.
+// MarshalJSON implements [json.Marshaler].
 func (v JSONString[T]) MarshalJSON() ([]byte, error) {
 	if !v.Valid {
 		return []byte("null"), nil
@@ -58,7 +109,7 @@ func (v JSONString[T]) MarshalJSON() ([]byte, error) {
 	return json.Marshal(v.Value)
 }
 
-// UnmarshalJSON implements json.Unmarshaler.
+// UnmarshalJSON implements [json.Unmarshaler].
 func (v *JSONString[T]) UnmarshalJSON(payload []byte) error {
 	return unmarshalJSONValue(&v.Value, &v.Valid, payload)
 }
@@ -77,16 +128,16 @@ func NewJSONValue[T any](value T) JSONValue[T] {
 	}
 }
 
-// EncodeSpanner implements spanner.Encoder.
-func (v JSONValue[T]) EncodeSpanner() (interface{}, error) {
+// EncodeSpanner implements [spanner.Encoder].
+func (v JSONValue[T]) EncodeSpanner() (any, error) {
 	if !v.Valid {
 		return spanner.NullJSON{}, nil
 	}
 	return spanner.NullJSON{Value: v.Value, Valid: true}, nil
 }
 
-// DecodeSpanner implements spanner.Decoder.
-func (v *JSONValue[T]) DecodeSpanner(input interface{}) error {
+// DecodeSpanner implements [spanner.Decoder].
+func (v *JSONValue[T]) DecodeSpanner(input any) error {
 	return decodeJSONValue(&v.Value, &v.Valid, input)
 }
 
@@ -95,7 +146,7 @@ func (v JSONValue[T]) IsNull() bool {
 	return !v.Valid
 }
 
-// MarshalJSON implements json.Marshaler.
+// MarshalJSON implements [json.Marshaler].
 func (v JSONValue[T]) MarshalJSON() ([]byte, error) {
 	if !v.Valid {
 		return []byte("null"), nil
@@ -103,12 +154,12 @@ func (v JSONValue[T]) MarshalJSON() ([]byte, error) {
 	return json.Marshal(v.Value)
 }
 
-// UnmarshalJSON implements json.Unmarshaler.
+// UnmarshalJSON implements [json.Unmarshaler].
 func (v *JSONValue[T]) UnmarshalJSON(payload []byte) error {
 	return unmarshalJSONValue(&v.Value, &v.Valid, payload)
 }
 
-func decodeJSONValue[T any](dst *T, valid *bool, input interface{}) error {
+func decodeJSONValue[T any](dst *T, valid *bool, input any) error {
 	switch value := input.(type) {
 	case nil:
 		return unmarshalJSONValue(dst, valid, nil)
@@ -159,4 +210,149 @@ func unmarshalJSONValue[T any](dst *T, valid *bool, payload []byte) error {
 	*dst = decoded
 	*valid = true
 	return nil
+}
+
+// encodeAny encodes primitive types that spanner library does not support into spanner types before
+// passing to spanner functions.
+//
+// Suppotted primitive types and user defined types that implement [spanner.Encoder] interface are
+// handled in encoding phase inside spanner libirary.
+func encodeAny(v any) any {
+	switch v.(type) {
+	case int8, uint8, int16, uint16, int32, uint32, uint64:
+		return &primitiveEncoderDecoder{val: v}
+	default:
+		return v
+	}
+}
+
+// decodeAny wraps primitive types that spanner library does not support to decode from spanner types
+// by yoPrimitiveDecoder before passing to spanner functions.
+//
+// Supported primitive types and user defined types that implement [spanner.Decoder] interface are
+// handled in decoding phase inside spanner libirary.
+func decodeAny(ptr any) any {
+	switch ptr.(type) {
+	case *int8, *uint8, *int16, *uint16, *int32, *uint32, *uint64:
+		return &primitiveEncoderDecoder{val: ptr}
+	default:
+		return ptr
+	}
+}
+
+func primitiveOutOfRangeError(value any, target string, err error) error {
+	if err != nil {
+		return spanner.ToSpannerError(status.Errorf(codes.OutOfRange, "failed to convert %v to %s: %v", value, target, err))
+	}
+	return spanner.ToSpannerError(status.Errorf(codes.OutOfRange, "value %v overflows %s", value, target))
+}
+
+type primitiveEncoderDecoder struct {
+	val any
+}
+
+var (
+	_ spanner.Encoder = (*primitiveEncoderDecoder)(nil)
+	_ spanner.Decoder = (*primitiveEncoderDecoder)(nil)
+)
+
+// EncodeSpanner implements [spanner.Encoder].
+func (d primitiveEncoderDecoder) EncodeSpanner() (any, error) {
+	switch vv := d.val.(type) {
+	case int8:
+		return int64(vv), nil
+	case uint8:
+		return int64(vv), nil
+	case int16:
+		return int64(vv), nil
+	case uint16:
+		return int64(vv), nil
+	case int32:
+		return int64(vv), nil
+	case uint32:
+		return int64(vv), nil
+	case uint64:
+		if vv > uint64(math.MaxInt64) {
+			return nil, primitiveOutOfRangeError(vv, "Spanner INT64", nil)
+		}
+		return int64(vv), nil
+	default:
+		return d.val, nil
+	}
+}
+
+// DecodeSpanner implements [spanner.Decoder].
+func (d *primitiveEncoderDecoder) DecodeSpanner(val any) error {
+	strVal, ok := val.(string)
+	if !ok {
+		return spanner.ToSpannerError(status.Errorf(codes.FailedPrecondition, "failed to decode customField: %[1]T: %[1]v", val))
+	}
+
+	switch vv := d.val.(type) {
+	case *int8:
+		intVal, err := decodeSignedPrimitive(strVal, 8)
+		if err != nil {
+			return err
+		}
+		*vv = int8(intVal)
+	case *uint8:
+		uintVal, err := decodeUnsignedPrimitive(strVal, 8)
+		if err != nil {
+			return err
+		}
+		*vv = uint8(uintVal)
+	case *int16:
+		intVal, err := decodeSignedPrimitive(strVal, 16)
+		if err != nil {
+			return err
+		}
+		*vv = int16(intVal)
+	case *uint16:
+		uintVal, err := decodeUnsignedPrimitive(strVal, 16)
+		if err != nil {
+			return err
+		}
+		*vv = uint16(uintVal)
+	case *int32:
+		intVal, err := decodeSignedPrimitive(strVal, 32)
+		if err != nil {
+			return err
+		}
+		*vv = int32(intVal)
+	case *uint32:
+		uintVal, err := decodeUnsignedPrimitive(strVal, 32)
+		if err != nil {
+			return err
+		}
+		*vv = uint32(uintVal)
+	case *uint64:
+		uintVal, err := decodeUnsignedPrimitive(strVal, 64)
+		if err != nil {
+			return err
+		}
+		*vv = uintVal
+	default:
+		return status.Errorf(codes.Internal, "unexpected type for primitiveEncoderDecoder: %T", d.val)
+	}
+
+	return nil
+}
+
+func decodeSignedPrimitive(strVal string, bitSize int) (int64, error) {
+	intVal, err := strconv.ParseInt(strVal, 10, bitSize)
+	if err != nil {
+		return 0, primitiveOutOfRangeError(strVal, fmt.Sprintf("int%d", bitSize), err)
+	}
+	return intVal, nil
+}
+
+func decodeUnsignedPrimitive(strVal string, bitSize int) (uint64, error) {
+	uintVal, err := strconv.ParseUint(strVal, 10, bitSize)
+	if err != nil {
+		return 0, primitiveOutOfRangeError(strVal, fmt.Sprintf("uint%d", bitSize), err)
+	}
+	if bitSize == 64 && uintVal > uint64(math.MaxInt64) {
+		return 0, primitiveOutOfRangeError(strVal, "Spanner INT64", nil)
+	}
+	return uintVal, nil
 }

@@ -82,6 +82,7 @@ func TestGenerator_Generate_BasicFiles(t *testing.T) {
 				"type Users struct",
 				"UserID int64",
 				`spanner:"name"`,
+				"func UsersWritableColumns() []string",
 				"func (t *Users) Insert() *spanner.Mutation",
 				"func FindUsersByPrimaryKey(ctx context.Context, db SpannerDB, userID int64) (*Users, error)",
 			},
@@ -98,6 +99,32 @@ func TestGenerator_Generate_BasicFiles(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestGenerator_Generate_ColumnSwitches(t *testing.T) {
+	root := newCompileFixtureRoot(t)
+	outDir := generateFromDDL(t, root, `CREATE TABLE Users (
+		user_id INT64 NOT NULL,
+		name STRING(MAX) NOT NULL,
+	) PRIMARY KEY (user_id)`, Options{PackageName: "models"})
+	content := readTextFile(t, filepath.Join(outDir, "users.spanner.go"))
+
+	tests := map[string]string{
+		"columnsToPtrs user_id":   "case \"user_id\":\n\t\t\tret[i] = decodeAny(&t.UserID)",
+		"columnsToPtrs name":      "case \"name\":\n\t\t\tret[i] = decodeAny(&t.Name)",
+		"columnsToValues user_id": "case \"user_id\":\n\t\t\tret[i] = encodeAny(t.UserID)",
+		"columnsToValues name":    "case \"name\":\n\t\t\tret[i] = encodeAny(t.Name)",
+	}
+
+	for name, want := range tests {
+		t.Run(name, func(t *testing.T) {
+			if !strings.Contains(content, want) {
+				t.Fatalf("users.spanner.go missing %q\n%s", want, content)
+			}
+		})
+	}
+
+	runGoTestDir(t, outDir)
 }
 
 func TestGenerator_Generate_RemovesLegacyHeaderFile(t *testing.T) {
@@ -431,10 +458,7 @@ func TestGenerator_Generate_CompositePrimaryKeyOrder(t *testing.T) {
 	}
 }`,
 		"find signature order": `func FindMembershipsByPrimaryKey(ctx context.Context, db SpannerDB, b string, a int64) (*Memberships, error)`,
-		"delete key order": `return spanner.Delete("Memberships", spanner.Key{
-		t.B,
-		t.A,
-	})`,
+		"delete key order":     `return spanner.Delete("Memberships", spanner.Key(t.values(MembershipsPrimaryKeys())))`,
 	}
 	for name, want := range tests {
 		t.Run(name, func(t *testing.T) {
@@ -473,13 +497,7 @@ func TestGenerator_Generate_UUIDImportsShareThirdPartyGroup(t *testing.T) {
 	outDir := generateFromDDL(t, root, ddl, Options{PackageName: "models"})
 	content := readTextFile(t, filepath.Join(outDir, "users.spanner.go"))
 
-	const wantImportBlock = `import (
-	"context"
-	"fmt"
-
-	"cloud.google.com/go/spanner"
-	"github.com/google/uuid"
-)`
+	const wantImportBlock = "import (\n\t\"context\"\n\t\"fmt\"\n\n\t\"cloud.google.com/go/spanner\"\n\t\"github.com/google/uuid\"\n\t\"google.golang.org/grpc/codes\"\n\t\"google.golang.org/grpc/status\"\n)"
 	if !strings.Contains(content, wantImportBlock) {
 		t.Fatalf("users.spanner.go missing grouped UUID import block:\n%s", content)
 	}
@@ -509,6 +527,42 @@ func TestGenerator_Generate_CommitTimestampHelpers(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestGenerator_Generate_WritableColumns(t *testing.T) {
+	ddl := `CREATE TABLE Users (
+		id INT64 NOT NULL,
+		display_name STRING(MAX),
+		nickname STRING(MAX) DEFAULT ('guest'),
+		display_name_lower STRING(MAX) AS (LOWER(display_name)) STORED,
+	) PRIMARY KEY (id)`
+
+	root := newCompileFixtureRoot(t)
+	outDir := generateFromDDL(t, root, ddl, Options{PackageName: "models"})
+	content := readTextFile(t, filepath.Join(outDir, "users.spanner.go"))
+
+	tests := map[string]string{
+		"writable columns helper": `func UsersWritableColumns() []string {
+	return []string{
+		"id",
+		"display_name",
+		"nickname",
+	}
+}`,
+		"insert uses writable columns": "func (t *Users) Insert() *spanner.Mutation {\n\twritableCols := UsersWritableColumns()\n\treturn spanner.Insert(\"Users\", writableCols, t.values(writableCols))\n}",
+		"update uses writable columns": "func (t *Users) Update() *spanner.Mutation {\n\twritableCols := UsersWritableColumns()\n\treturn spanner.Update(\"Users\", writableCols, t.values(writableCols))\n}",
+		"upsert uses writable columns": "func (t *Users) InsertOrUpdate() *spanner.Mutation {\n\twritableCols := UsersWritableColumns()\n\treturn spanner.InsertOrUpdate(\"Users\", writableCols, t.values(writableCols))\n}",
+	}
+
+	for name, want := range tests {
+		t.Run(name, func(t *testing.T) {
+			if !strings.Contains(content, want) {
+				t.Fatalf("users.spanner.go missing %q", want)
+			}
+		})
+	}
+
+	runGoTestDir(t, outDir)
 }
 
 func TestGenerator_Generate_CompileGeneratedOutput(t *testing.T) {
@@ -588,6 +642,14 @@ type Payload struct {
 				}
 			},
 		},
+		"success: writable columns compile with default and generated expressions": {
+			ddl: `CREATE TABLE Runs (
+				id INT64 NOT NULL,
+				created_at TIMESTAMP DEFAULT (CURRENT_TIMESTAMP()),
+				name STRING(MAX),
+				name_lower STRING(MAX) AS (LOWER(name)) STORED,
+			) PRIMARY KEY (id)`,
+		},
 	}
 
 	for name, tt := range tests {
@@ -601,6 +663,156 @@ type Payload struct {
 			runGoTestDir(t, outDir)
 		})
 	}
+}
+
+func TestGenerator_Generate_PrimitiveIntegerBounds(t *testing.T) {
+	root := newCompileFixtureRoot(t)
+	outDir := generateFromDDL(t, root, `CREATE TABLE Runs (
+		id INT64 NOT NULL,
+		count INT64,
+	) PRIMARY KEY (id)`, Options{PackageName: "models"})
+	writeTextFile(t, filepath.Join(outDir, "primitive_bounds_test.go"), `package models
+
+import (
+	"math"
+	"testing"
+
+	"cloud.google.com/go/spanner"
+	"google.golang.org/grpc/codes"
+)
+
+func TestPrimitiveEncoderDecoderEncodeBounds(t *testing.T) {
+	tests := map[string]struct {
+		value    any
+		want     any
+		wantCode codes.Code
+	}{
+		"success: int8 max encodes": {
+			value: int8(math.MaxInt8),
+			want:  int64(math.MaxInt8),
+		},
+		"success: uint32 max encodes": {
+			value: uint32(math.MaxUint32),
+			want:  int64(math.MaxUint32),
+		},
+		"success: uint64 max spanner int64 encodes": {
+			value: uint64(math.MaxInt64),
+			want:  int64(math.MaxInt64),
+		},
+		"error: uint64 above spanner int64 overflows": {
+			value:    uint64(math.MaxInt64) + 1,
+			wantCode: codes.OutOfRange,
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			encoder, ok := encodeAny(tt.value).(spanner.Encoder)
+			if !ok {
+				t.Fatalf("encodeAny(%T) did not return spanner.Encoder", tt.value)
+			}
+			got, err := encoder.EncodeSpanner()
+			if tt.wantCode != codes.OK {
+				if gotCode := spanner.ErrCode(err); gotCode != tt.wantCode {
+					t.Fatalf("EncodeSpanner() code = %v, want %v (err=%v)", gotCode, tt.wantCode, err)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("EncodeSpanner() error = %v", err)
+			}
+			if got != tt.want {
+				t.Fatalf("EncodeSpanner() = %[1]T(%[1]v), want %[2]T(%[2]v)", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestPrimitiveEncoderDecoderDecodeBounds(t *testing.T) {
+	tests := map[string]struct {
+		ptr      any
+		input    string
+		want     any
+		wantCode codes.Code
+	}{
+		"success: int8 max decodes": {
+			ptr:   new(int8),
+			input: "127",
+			want:  int8(127),
+		},
+		"error: int8 overflow rejected": {
+			ptr:      new(int8),
+			input:    "128",
+			wantCode: codes.OutOfRange,
+		},
+		"success: uint8 max decodes": {
+			ptr:   new(uint8),
+			input: "255",
+			want:  uint8(255),
+		},
+		"error: uint8 negative rejected": {
+			ptr:      new(uint8),
+			input:    "-1",
+			wantCode: codes.OutOfRange,
+		},
+		"success: uint64 max spanner int64 decodes": {
+			ptr:   new(uint64),
+			input: "9223372036854775807",
+			want:  uint64(math.MaxInt64),
+		},
+		"error: uint64 above spanner int64 rejected": {
+			ptr:      new(uint64),
+			input:    "9223372036854775808",
+			wantCode: codes.OutOfRange,
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			decoder, ok := decodeAny(tt.ptr).(spanner.Decoder)
+			if !ok {
+				t.Fatalf("decodeAny(%T) did not return spanner.Decoder", tt.ptr)
+			}
+			err := decoder.DecodeSpanner(tt.input)
+			if tt.wantCode != codes.OK {
+				if gotCode := spanner.ErrCode(err); gotCode != tt.wantCode {
+					t.Fatalf("DecodeSpanner() code = %v, want %v (err=%v)", gotCode, tt.wantCode, err)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("DecodeSpanner() error = %v", err)
+			}
+			if got := primitivePointerValue(tt.ptr); got != tt.want {
+				t.Fatalf("DecodeSpanner() stored %[1]T(%[1]v), want %[2]T(%[2]v)", got, tt.want)
+			}
+		})
+	}
+}
+
+func primitivePointerValue(ptr any) any {
+	switch vv := ptr.(type) {
+	case *int8:
+		return *vv
+	case *uint8:
+		return *vv
+	case *int16:
+		return *vv
+	case *uint16:
+		return *vv
+	case *int32:
+		return *vv
+	case *uint32:
+		return *vv
+	case *uint64:
+		return *vv
+	default:
+		panic("unsupported primitive pointer")
+	}
+}
+`)
+
+	runGoTestDir(t, outDir)
 }
 
 func TestGenerator_Generate_TemplatePathOverride(t *testing.T) {
@@ -875,10 +1087,175 @@ func moduleImportPath(t *testing.T, absPath string) string {
 func runGoTestDir(t *testing.T, dir string) {
 	t.Helper()
 
-	cmd := exec.CommandContext(t.Context(), "go", "test", ".")
+	writeFixtureGoMod(t, dir)
+
+	cmd := exec.CommandContext(t.Context(), "go", "test", "-mod=mod", ".")
 	cmd.Dir = dir
+	cmd.Env = append(os.Environ(), "GOWORK=off")
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("go test . in %s failed: %v\n%s", dir, err, output)
 	}
+}
+
+func writeFixtureGoMod(t *testing.T, dir string) {
+	t.Helper()
+
+	wd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getting working directory: %v", err)
+	}
+	repoRoot := filepath.Dir(wd)
+
+	content := "module generated.test\n\ngo 1.26\n\nrequire github.com/zchee/spanner-manager v0.0.0\n\nreplace github.com/zchee/spanner-manager => " + repoRoot + "\n"
+	path := filepath.Join(dir, "go.mod")
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatalf("writing fixture go.mod %s: %v", path, err)
+	}
+}
+
+func TestGenerator_Generate_ReadErrorCodes(t *testing.T) {
+	root := newCompileFixtureRoot(t)
+	outDir := generateFromDDL(t, root, `CREATE TABLE Runs (
+		id INT64 NOT NULL,
+	) PRIMARY KEY (id)`, Options{PackageName: "models"})
+	writeTextFile(t, filepath.Join(outDir, "read_error_test.go"), `package models
+
+import (
+	"context"
+	"reflect"
+	"testing"
+	"unsafe"
+
+	"cloud.google.com/go/spanner"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+)
+
+type fakeReadErrorDB struct {
+	iter *spanner.RowIterator
+}
+
+func (db fakeReadErrorDB) Read(ctx context.Context, table string, keys spanner.KeySet, columns []string) *spanner.RowIterator {
+	return db.iter
+}
+
+func (db fakeReadErrorDB) ReadRow(ctx context.Context, table string, key spanner.Key, columns []string) (*spanner.Row, error) {
+	panic("unexpected ReadRow call")
+}
+
+func (db fakeReadErrorDB) Query(ctx context.Context, statement spanner.Statement) *spanner.RowIterator {
+	panic("unexpected Query call")
+}
+
+func setRowIteratorField(t *testing.T, iter *spanner.RowIterator, field string, value any) {
+	t.Helper()
+
+	rv := reflect.ValueOf(iter).Elem().FieldByName(field)
+	if !rv.IsValid() {
+		t.Fatalf("field %q not found on RowIterator", field)
+	}
+	reflect.NewAt(rv.Type(), unsafe.Pointer(rv.UnsafeAddr())).Elem().Set(reflect.ValueOf(value))
+}
+
+func setRowIteratorPointerField(t *testing.T, iter *spanner.RowIterator, field string) {
+	t.Helper()
+
+	rv := reflect.ValueOf(iter).Elem().FieldByName(field)
+	if !rv.IsValid() {
+		t.Fatalf("field %q not found on RowIterator", field)
+	}
+	ptr := reflect.New(rv.Type().Elem())
+	reflect.NewAt(rv.Type(), unsafe.Pointer(rv.UnsafeAddr())).Elem().Set(ptr)
+}
+
+func TestReadRunsPreservesSpannerIteratorErrorCode(t *testing.T) {
+	iter := &spanner.RowIterator{}
+	setRowIteratorPointerField(t, iter, "meterTracerFactory")
+	setRowIteratorField(t, iter, "err", status.Error(codes.Unavailable, "read failed"))
+
+	_, err := ReadRuns(t.Context(), fakeReadErrorDB{iter: iter}, spanner.AllKeys())
+	if err == nil {
+		t.Fatal("ReadRuns() error = nil, want non-nil")
+	}
+	if got := spanner.ErrCode(err); got != codes.Unavailable {
+		t.Fatalf("ReadRuns() code = %v, want %v (err=%v)", got, codes.Unavailable, err)
+	}
+}
+
+func TestReadRunsWrapsDecoderFailuresAsInternal(t *testing.T) {
+	row, err := spanner.NewRow([]string{"id"}, []any{"bad"})
+	if err != nil {
+		t.Fatalf("NewRow() error = %v", err)
+	}
+
+	iter := &spanner.RowIterator{}
+	setRowIteratorPointerField(t, iter, "meterTracerFactory")
+	setRowIteratorField(t, iter, "rows", []*spanner.Row{row})
+
+	_, err = ReadRuns(t.Context(), fakeReadErrorDB{iter: iter}, spanner.AllKeys())
+	if err == nil {
+		t.Fatal("ReadRuns() error = nil, want non-nil")
+	}
+	if got := spanner.ErrCode(err); got != codes.Internal {
+		t.Fatalf("ReadRuns() code = %v, want %v (err=%v)", got, codes.Internal, err)
+	}
+}
+`)
+
+	runGoTestDir(t, outDir)
+}
+
+func TestGenerator_Generate_ColumnHelperRuntimeErrors(t *testing.T) {
+	root := newCompileFixtureRoot(t)
+	outDir := generateFromDDL(t, root, `CREATE TABLE Users (
+		user_id INT64 NOT NULL,
+		name STRING(MAX) NOT NULL,
+	) PRIMARY KEY (user_id)`, Options{PackageName: "models"})
+	writeTextFile(t, filepath.Join(outDir, "column_helpers_test.go"), `package models
+
+import (
+	"fmt"
+	"strings"
+	"testing"
+)
+
+func TestColumnsToPtrsRejectsUnknownColumns(t *testing.T) {
+	row := &Users{}
+	_, err := row.columnsToPtrs([]string{"unknown"})
+	if err == nil {
+		t.Fatal("columnsToPtrs() error = nil, want non-nil")
+	}
+	if !strings.Contains(err.Error(), "unknown column: unknown") {
+		t.Fatalf("columnsToPtrs() error = %v, want unknown-column error", err)
+	}
+}
+
+func TestColumnsToValuesRejectsUnknownColumns(t *testing.T) {
+	row := &Users{}
+	_, err := row.columnsToValues([]string{"unknown"})
+	if err == nil {
+		t.Fatal("columnsToValues() error = nil, want non-nil")
+	}
+	if !strings.Contains(err.Error(), "unknown column: unknown") {
+		t.Fatalf("columnsToValues() error = %v, want unknown-column error", err)
+	}
+}
+
+func TestValuesPanicsOnUnknownColumns(t *testing.T) {
+	row := &Users{}
+	defer func() {
+		r := recover()
+		if r == nil {
+			t.Fatal("values() panic = nil, want non-nil")
+		}
+		if got := fmt.Sprint(r); !strings.Contains(got, "unknown column: unknown") {
+			t.Fatalf("values() panic = %v, want unknown-column panic", r)
+		}
+	}()
+	_ = row.values([]string{"unknown"})
+}
+`)
+
+	runGoTestDir(t, outDir)
 }

@@ -97,7 +97,7 @@ func (s *InformationSchemaSource) loadType(ctx context.Context, tableName string
 
 	// Query columns.
 	iter := s.client.Single().Query(ctx, spanner.Statement{
-		SQL: `SELECT COLUMN_NAME, SPANNER_TYPE, IS_NULLABLE, IS_GENERATED,
+		SQL: `SELECT COLUMN_NAME, SPANNER_TYPE, IS_NULLABLE, COLUMN_DEFAULT, GENERATION_EXPRESSION,
 			         ORDINAL_POSITION
 			  FROM INFORMATION_SCHEMA.COLUMNS
 			  WHERE TABLE_SCHEMA = '' AND TABLE_NAME = @table
@@ -106,9 +106,10 @@ func (s *InformationSchemaSource) loadType(ctx context.Context, tableName string
 	})
 
 	if err := iter.Do(func(row *spanner.Row) error {
-		var colName, spannerType, isNullable, isGenerated string
+		var colName, spannerType, isNullable string
+		var columnDefault, generationExpression spanner.NullString
 		var ordinal int64
-		if err := row.Columns(&colName, &spannerType, &isNullable, &isGenerated, &ordinal); err != nil {
+		if err := row.Columns(&colName, &spannerType, &isNullable, &columnDefault, &generationExpression, &ordinal); err != nil {
 			return err
 		}
 
@@ -116,6 +117,7 @@ func (s *InformationSchemaSource) loadType(ctx context.Context, tableName string
 		if err != nil {
 			return err
 		}
+		hasDefault, isGenerated := fieldWriteSemanticsFromInformationSchema(columnDefault, generationExpression)
 
 		f := Field{
 			Name:                 snakeToCamel(colName),
@@ -125,7 +127,8 @@ func (s *InformationSchemaSource) loadType(ctx context.Context, tableName string
 			IsArray:              typeInfo.IsArray,
 			GoType:               typeInfo.Expr,
 			NotNull:              isNullable == "NO",
-			IsGenerated:          isGenerated == "ALWAYS",
+			HasDefault:           hasDefault,
+			IsGenerated:          isGenerated,
 			AllowCommitTimestamp: commitTimestampColumns[colName],
 			Imports:              typeInfo.Imports,
 		}
@@ -259,10 +262,7 @@ func (s *DDLFileSource) Load(_ context.Context) (*Schema, error) {
 			notNull := col.NotNull
 			typeInfo := goTypeForSchemaType(col.Type, !notNull)
 
-			var isGenerated bool
-			if col.DefaultSemantics != nil {
-				_, isGenerated = col.DefaultSemantics.(*ast.GeneratedColumnExpr)
-			}
+			hasDefault, isGenerated := fieldWriteSemanticsFromDefaultSemantics(col.DefaultSemantics)
 			f := Field{
 				Name:                 snakeToCamel(col.Name.Name),
 				ColumnName:           col.Name.Name,
@@ -271,6 +271,7 @@ func (s *DDLFileSource) Load(_ context.Context) (*Schema, error) {
 				IsArray:              typeInfo.IsArray,
 				GoType:               typeInfo.Expr,
 				NotNull:              notNull,
+				HasDefault:           hasDefault,
 				IsGenerated:          isGenerated,
 				AllowCommitTimestamp: columnHasTrueOption(col.Options, "allow_commit_timestamp"),
 				Imports:              typeInfo.Imports,
@@ -315,6 +316,24 @@ func columnHasTrueOption(options *ast.Options, name string) bool {
 		return ok && lit.Value
 	}
 	return false
+}
+
+func fieldWriteSemanticsFromDefaultSemantics(semantics ast.ColumnDefaultSemantics) (hasDefault, isGenerated bool) {
+	switch semantics.(type) {
+	case nil:
+		return false, false
+	case *ast.GeneratedColumnExpr:
+		return false, true
+	default:
+		return true, false
+	}
+}
+
+func fieldWriteSemanticsFromInformationSchema(columnDefault, generationExpression spanner.NullString) (hasDefault, isGenerated bool) {
+	if generationExpression.Valid && strings.TrimSpace(generationExpression.StringVal) != "" {
+		return false, true
+	}
+	return columnDefault.Valid && strings.TrimSpace(columnDefault.StringVal) != "", false
 }
 
 // snakeToCamel converts a snake_case string to CamelCase.

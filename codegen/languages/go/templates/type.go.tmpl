@@ -7,20 +7,15 @@ import (
 // {{ .Type.Name }} represents a row from '{{ .Type.Table }}'.
 type {{ .Type.Name }} struct {
 {{- range .Type.Fields }}
-	{{ .Name }} {{ .GoType }} `spanner:"{{ .ColumnName }}"`
+{{- if eq (.BaseSpannerType) (.ColumnName) }}
+	{{ .Name }} string `spanner:"{{ .ColumnName }}" json:"{{ .ColumnName }}"` // {{ .ColumnName }} enum
+{{- else }}
+	{{ .Name }} {{ .GoType }} `spanner:"{{ .ColumnName }}" json:"{{ .ColumnName }}"` // {{ .ColumnName }}
+{{- end }}
 {{- end }}
 }
 
-// {{ .Type.Name }}Columns returns the columns for {{ .Type.Name }}.
-func {{ .Type.Name }}Columns() []string {
-	return []string{
-{{- range .Type.Fields }}
-		"{{ .ColumnName }}",
-{{- end }}
-	}
-}
-
-// {{ .Type.Name }}PrimaryKeys returns the primary key columns.
+// {{ .Type.Name }}PrimaryKeys returns the primary key columns for [{{ .Type.Name }}].
 func {{ .Type.Name }}PrimaryKeys() []string {
 	return []string{
 {{- range .Type.PrimaryKeyFields }}
@@ -29,43 +24,114 @@ func {{ .Type.Name }}PrimaryKeys() []string {
 	}
 }
 
-// Insert returns a Mutation to insert a row into {{ .Type.Table }}.
+// {{ .Type.Name }}Columns returns the columns for [{{ .Type.Name }}].
+func {{ .Type.Name }}Columns() []string {
+	return []string{
+{{- range .Type.Fields }}
+		"{{ .ColumnName }}",
+{{- end }}
+	}
+}
+
+// {{ .Type.Name }}WritableColumns returns the writable columns for [{{ .Type.Name }}].
+func {{ .Type.Name }}WritableColumns() []string {
+	return []string{
+{{- range .Type.WritableFields }}
+		"{{ .ColumnName }}",
+{{- end }}
+	}
+}
+
+func (t *{{ .Type.Name }}) columnsToPtrs(cols []string) ([]any, error) {
+	ret := make([]any, len(cols))
+	for i, col := range cols {
+		switch col {
+{{- range .Type.Fields }}
+		case "{{ .ColumnName }}":
+			ret[i] = decodeAny(&t.{{ .Name }})
+{{- end }}
+		default:
+			return nil, fmt.Errorf("unknown column: %s", col)
+		}
+	}
+	return ret, nil
+}
+
+func (t *{{ .Type.Name }}) columnsToValues(cols []string) ([]any, error) {
+	ret := make([]any, len(cols))
+	for i, col := range cols {
+		switch col {
+{{- range .Type.Fields }}
+		case "{{ .ColumnName }}":
+			ret[i] = encodeAny(t.{{ .Name }})
+{{- end }}
+		default:
+			return nil, fmt.Errorf("unknown column: %s", col)
+		}
+	}
+	return ret, nil
+}
+
+// new{{ .Type.Name }}Decoder returns a decoder which reads a row from [*spanner.Row]
+// into [{{ .Type.Name }}].
+//
+// The decoder is not goroutine-safe. Don't use it concurrently.
+func new{{ .Type.Name }}Decoder(cols []string) func(*spanner.Row) (*{{ .Type.Name }}, error) {
+	return func(row *spanner.Row) (*{{ .Type.Name }}, error) {
+        var t {{ .Type.Name }}
+        ptrs, err := t.columnsToPtrs(cols)
+        if err != nil {
+            return nil, err
+        }
+
+        if err := row.Columns(ptrs...); err != nil {
+            return nil, err
+        }
+
+		return &t, nil
+	}
+}
+
+func (t *{{ .Type.Name }}) values(cols []string) []any {
+	values, err := t.columnsToValues(cols)
+	if err != nil {
+		panic(err)
+	}
+	return values
+}
+
+// Insert returns a [*spanner.Mutation] to insert a row into [{{ .Type.Table }}].
 func (t *{{ .Type.Name }}) Insert() *spanner.Mutation {
-	return spanner.Insert("{{ .Type.Table }}", {{ .Type.Name }}Columns(), []any{
-{{- range .Type.Fields }}
-		t.{{ .Name }},
-{{- end }}
-	})
+	writableCols := {{ .Type.Name }}WritableColumns()
+	return spanner.Insert("{{ .Type.Table }}", writableCols, t.values(writableCols))
 }
 
-// Update returns a Mutation to update a row in {{ .Type.Table }}.
+// Update returns a [*spanner.Mutation] to update a row in [{{ .Type.Table }}].
 func (t *{{ .Type.Name }}) Update() *spanner.Mutation {
-	return spanner.Update("{{ .Type.Table }}", {{ .Type.Name }}Columns(), []any{
-{{- range .Type.Fields }}
-		t.{{ .Name }},
-{{- end }}
-	})
+	writableCols := {{ .Type.Name }}WritableColumns()
+	return spanner.Update("{{ .Type.Table }}", writableCols, t.values(writableCols))
 }
 
-// InsertOrUpdate returns a Mutation to insert or update a row in {{ .Type.Table }}.
+// InsertOrUpdate returns a [*spanner.Mutation] to insert or update a row in [{{ .Type.Table }}].
 func (t *{{ .Type.Name }}) InsertOrUpdate() *spanner.Mutation {
-	return spanner.InsertOrUpdate("{{ .Type.Table }}", {{ .Type.Name }}Columns(), []any{
-{{- range .Type.Fields }}
-		t.{{ .Name }},
-{{- end }}
-	})
+	writableCols := {{ .Type.Name }}WritableColumns()
+	return spanner.InsertOrUpdate("{{ .Type.Table }}", writableCols, t.values(writableCols))
 }
 
-// Delete returns a Mutation to delete the {{ .Type.Name }} row.
+// Replace returns a [*spanner.Mutation] to insert a row into a table, deleting any
+// existing row in [{{ .Type.Table }}]. Unlike InsertOrUpdate, this means any values not explicitly
+// written become NULL.
+func (t *{{ .Type.Name }}) Replace() *spanner.Mutation {
+	writableCols := {{ .Type.Name }}WritableColumns()
+	return spanner.Replace("{{ .Type.Table }}", writableCols, t.values(writableCols))
+}
+
+// Delete returns a [*spanner.Mutation] to delete the [{{ .Type.Name }}] row.
 func (t *{{ .Type.Name }}) Delete() *spanner.Mutation {
-	return spanner.Delete("{{ .Type.Table }}", spanner.Key{
-{{- range .Type.PrimaryKeyFields }}
-		t.{{ .Name }},
-{{- end }}
-	})
+	return spanner.Delete("{{ .Type.Table }}", spanner.Key(t.values({{ .Type.Name }}PrimaryKeys())))
 }
 
-// Find{{ .Type.Name }}ByPrimaryKey finds a {{ .Type.Name }} by its primary key.
+// Find{{ .Type.Name }}ByPrimaryKey finds a [{{ .Type.Name }}] by its primary key.
 func Find{{ .Type.Name }}ByPrimaryKey(ctx context.Context, db SpannerDB{{ range .Type.PrimaryKeyFields }}, {{ .Name | lowerFirst }} {{ .GoType }}{{ end }}) (*{{ .Type.Name }}, error) {
 	key := spanner.Key{
 {{- range .Type.PrimaryKeyFields }}
@@ -73,17 +139,44 @@ func Find{{ .Type.Name }}ByPrimaryKey(ctx context.Context, db SpannerDB{{ range 
 {{- end }}
 	}
 
-	row, err := db.ReadRow(ctx, "{{ .Type.Table }}", key, {{ .Type.Name }}Columns())
+	cols := {{ .Type.Name}}Columns()
+
+	row, err := db.ReadRow(ctx, "{{ .Type.Table }}", key, cols)
 	if err != nil {
-		return nil, fmt.Errorf("finding {{ .Type.Name }}: %w", err)
+		return nil, newError("Find{{ .Type.Name }}", "{{ .Type.Table }}", err)
 	}
 
-	var t {{ .Type.Name }}
-	if err := row.ToStruct(&t); err != nil {
-		return nil, fmt.Errorf("scanning {{ .Type.Name }}: %w", err)
+	decoder := new{{ .Type.Name }}Decoder(cols)
+	t, err := decoder(row)
+	if err != nil {
+		return nil, newErrorWithCode(codes.Internal, "Find{{ .Type.Name }}", "{{ .Type.Table }}", err)
 	}
 
-	return &t, nil
+	return t, nil
+}
+
+// Read{{ .Type.Name }} retrieves multiples rows from [{{ .Type.Name }}] by [spanner.KeySet] as a slice.
+func Read{{ .Type.Name }}(ctx context.Context, db SpannerDB, keys spanner.KeySet) ([]*{{ .Type.Name }}, error) {
+	var res []*{{ .Type.Name }}
+
+	cols := {{ .Type.Name}}Columns()
+
+	decoder := new{{ .Type.Name }}Decoder(cols)
+	rows := db.Read(ctx, "{{ .Type.Table }}", keys, cols)
+	err := rows.Do(func(row *spanner.Row) error {
+		val, err := decoder(row)
+		if err != nil {
+			return status.Errorf(codes.Internal, "failed to decode {{ .Type.Name }} row: %v", err)
+		}
+		res = append(res, val)
+
+		return nil
+	})
+	if err != nil {
+		return nil, newError("Read{{ .Type.Name }}", "{{ .Type.Table }}", err)
+	}
+
+	return res, nil
 }
 
 {{- if .Type.CommitTSFields }}
