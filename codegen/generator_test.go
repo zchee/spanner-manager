@@ -1205,3 +1205,57 @@ func TestReadRunsWrapsDecoderFailuresAsInternal(t *testing.T) {
 
 	runGoTestDir(t, outDir)
 }
+
+func TestGenerator_Generate_ColumnHelperRuntimeErrors(t *testing.T) {
+	root := newCompileFixtureRoot(t)
+	outDir := generateFromDDL(t, root, `CREATE TABLE Users (
+		user_id INT64 NOT NULL,
+		name STRING(MAX) NOT NULL,
+	) PRIMARY KEY (user_id)`, Options{PackageName: "models"})
+	writeTextFile(t, filepath.Join(outDir, "column_helpers_test.go"), `package models
+
+import (
+	"fmt"
+	"strings"
+	"testing"
+)
+
+func TestColumnsToPtrsRejectsUnknownColumns(t *testing.T) {
+	row := &Users{}
+	_, err := row.columnsToPtrs([]string{"unknown"})
+	if err == nil {
+		t.Fatal("columnsToPtrs() error = nil, want non-nil")
+	}
+	if !strings.Contains(err.Error(), "unknown column: unknown") {
+		t.Fatalf("columnsToPtrs() error = %v, want unknown-column error", err)
+	}
+}
+
+func TestColumnsToValuesRejectsUnknownColumns(t *testing.T) {
+	row := &Users{}
+	_, err := row.columnsToValues([]string{"unknown"})
+	if err == nil {
+		t.Fatal("columnsToValues() error = nil, want non-nil")
+	}
+	if !strings.Contains(err.Error(), "unknown column: unknown") {
+		t.Fatalf("columnsToValues() error = %v, want unknown-column error", err)
+	}
+}
+
+func TestValuesPanicsOnUnknownColumns(t *testing.T) {
+	row := &Users{}
+	defer func() {
+		r := recover()
+		if r == nil {
+			t.Fatal("values() panic = nil, want non-nil")
+		}
+		if got := fmt.Sprint(r); !strings.Contains(got, "unknown column: unknown") {
+			t.Fatalf("values() panic = %v, want unknown-column panic", r)
+		}
+	}()
+	_ = row.values([]string{"unknown"})
+}
+`)
+
+	runGoTestDir(t, outDir)
+}
