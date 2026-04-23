@@ -665,6 +665,156 @@ type Payload struct {
 	}
 }
 
+func TestGenerator_Generate_PrimitiveIntegerBounds(t *testing.T) {
+	root := newCompileFixtureRoot(t)
+	outDir := generateFromDDL(t, root, `CREATE TABLE Runs (
+		id INT64 NOT NULL,
+		count INT64,
+	) PRIMARY KEY (id)`, Options{PackageName: "models"})
+	writeTextFile(t, filepath.Join(outDir, "primitive_bounds_test.go"), `package models
+
+import (
+	"math"
+	"testing"
+
+	"cloud.google.com/go/spanner"
+	"google.golang.org/grpc/codes"
+)
+
+func TestPrimitiveEncoderDecoderEncodeBounds(t *testing.T) {
+	tests := map[string]struct {
+		value    any
+		want     any
+		wantCode codes.Code
+	}{
+		"success: int8 max encodes": {
+			value: int8(math.MaxInt8),
+			want:  int64(math.MaxInt8),
+		},
+		"success: uint32 max encodes": {
+			value: uint32(math.MaxUint32),
+			want:  int64(math.MaxUint32),
+		},
+		"success: uint64 max spanner int64 encodes": {
+			value: uint64(math.MaxInt64),
+			want:  int64(math.MaxInt64),
+		},
+		"error: uint64 above spanner int64 overflows": {
+			value:    uint64(math.MaxInt64) + 1,
+			wantCode: codes.OutOfRange,
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			encoder, ok := encodeAny(tt.value).(spanner.Encoder)
+			if !ok {
+				t.Fatalf("encodeAny(%T) did not return spanner.Encoder", tt.value)
+			}
+			got, err := encoder.EncodeSpanner()
+			if tt.wantCode != codes.OK {
+				if gotCode := spanner.ErrCode(err); gotCode != tt.wantCode {
+					t.Fatalf("EncodeSpanner() code = %v, want %v (err=%v)", gotCode, tt.wantCode, err)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("EncodeSpanner() error = %v", err)
+			}
+			if got != tt.want {
+				t.Fatalf("EncodeSpanner() = %[1]T(%[1]v), want %[2]T(%[2]v)", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestPrimitiveEncoderDecoderDecodeBounds(t *testing.T) {
+	tests := map[string]struct {
+		ptr      any
+		input    string
+		want     any
+		wantCode codes.Code
+	}{
+		"success: int8 max decodes": {
+			ptr:   new(int8),
+			input: "127",
+			want:  int8(127),
+		},
+		"error: int8 overflow rejected": {
+			ptr:      new(int8),
+			input:    "128",
+			wantCode: codes.OutOfRange,
+		},
+		"success: uint8 max decodes": {
+			ptr:   new(uint8),
+			input: "255",
+			want:  uint8(255),
+		},
+		"error: uint8 negative rejected": {
+			ptr:      new(uint8),
+			input:    "-1",
+			wantCode: codes.OutOfRange,
+		},
+		"success: uint64 max spanner int64 decodes": {
+			ptr:   new(uint64),
+			input: "9223372036854775807",
+			want:  uint64(math.MaxInt64),
+		},
+		"error: uint64 above spanner int64 rejected": {
+			ptr:      new(uint64),
+			input:    "9223372036854775808",
+			wantCode: codes.OutOfRange,
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			decoder, ok := decodeAny(tt.ptr).(spanner.Decoder)
+			if !ok {
+				t.Fatalf("decodeAny(%T) did not return spanner.Decoder", tt.ptr)
+			}
+			err := decoder.DecodeSpanner(tt.input)
+			if tt.wantCode != codes.OK {
+				if gotCode := spanner.ErrCode(err); gotCode != tt.wantCode {
+					t.Fatalf("DecodeSpanner() code = %v, want %v (err=%v)", gotCode, tt.wantCode, err)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("DecodeSpanner() error = %v", err)
+			}
+			if got := primitivePointerValue(tt.ptr); got != tt.want {
+				t.Fatalf("DecodeSpanner() stored %[1]T(%[1]v), want %[2]T(%[2]v)", got, tt.want)
+			}
+		})
+	}
+}
+
+func primitivePointerValue(ptr any) any {
+	switch vv := ptr.(type) {
+	case *int8:
+		return *vv
+	case *uint8:
+		return *vv
+	case *int16:
+		return *vv
+	case *uint16:
+		return *vv
+	case *int32:
+		return *vv
+	case *uint32:
+		return *vv
+	case *uint64:
+		return *vv
+	default:
+		panic("unsupported primitive pointer")
+	}
+}
+`)
+
+	runGoTestDir(t, outDir)
+}
+
 func TestGenerator_Generate_TemplatePathOverride(t *testing.T) {
 	root := newCompileFixtureRoot(t)
 	outDir := filepath.Join(root, "models")

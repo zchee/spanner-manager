@@ -2,6 +2,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
+	"strconv"
 
 	"cloud.google.com/go/spanner"
 	"github.com/go-json-experiment/json"
@@ -238,6 +240,13 @@ func decodeAny(ptr any) any {
 	}
 }
 
+func primitiveOutOfRangeError(value any, target string, err error) error {
+	if err != nil {
+		return spanner.ToSpannerError(status.Errorf(codes.OutOfRange, "failed to convert %v to %s: %v", value, target, err))
+	}
+	return spanner.ToSpannerError(status.Errorf(codes.OutOfRange, "value %v overflows %s", value, target))
+}
+
 type primitiveEncoderDecoder struct {
 	val any
 }
@@ -263,6 +272,9 @@ func (d primitiveEncoderDecoder) EncodeSpanner() (any, error) {
 	case uint32:
 		return int64(vv), nil
 	case uint64:
+		if vv > uint64(math.MaxInt64) {
+			return nil, primitiveOutOfRangeError(vv, "Spanner INT64", nil)
+		}
 		return int64(vv), nil
 	default:
 		return d.val, nil
@@ -276,29 +288,71 @@ func (d *primitiveEncoderDecoder) DecodeSpanner(val any) error {
 		return spanner.ToSpannerError(status.Errorf(codes.FailedPrecondition, "failed to decode customField: %[1]T: %[1]v", val))
 	}
 
-	intVal, err := strconv.ParseInt(strVal, 10, 64)
-	if err != nil {
-		return spanner.ToSpannerError(status.Errorf(codes.FailedPrecondition, "%v wasn't correctly encoded: %v", val, err))
-	}
-
 	switch vv := d.val.(type) {
 	case *int8:
+		intVal, err := decodeSignedPrimitive(strVal, 8)
+		if err != nil {
+			return err
+		}
 		*vv = int8(intVal)
 	case *uint8:
-		*vv = uint8(intVal)
+		uintVal, err := decodeUnsignedPrimitive(strVal, 8)
+		if err != nil {
+			return err
+		}
+		*vv = uint8(uintVal)
 	case *int16:
+		intVal, err := decodeSignedPrimitive(strVal, 16)
+		if err != nil {
+			return err
+		}
 		*vv = int16(intVal)
 	case *uint16:
-		*vv = uint16(intVal)
+		uintVal, err := decodeUnsignedPrimitive(strVal, 16)
+		if err != nil {
+			return err
+		}
+		*vv = uint16(uintVal)
 	case *int32:
+		intVal, err := decodeSignedPrimitive(strVal, 32)
+		if err != nil {
+			return err
+		}
 		*vv = int32(intVal)
 	case *uint32:
-		*vv = uint32(intVal)
+		uintVal, err := decodeUnsignedPrimitive(strVal, 32)
+		if err != nil {
+			return err
+		}
+		*vv = uint32(uintVal)
 	case *uint64:
-		*vv = uint64(intVal)
+		uintVal, err := decodeUnsignedPrimitive(strVal, 64)
+		if err != nil {
+			return err
+		}
+		*vv = uintVal
 	default:
 		return status.Errorf(codes.Internal, "unexpected type for primitiveEncoderDecoder: %T", d.val)
 	}
 
 	return nil
+}
+
+func decodeSignedPrimitive(strVal string, bitSize int) (int64, error) {
+	intVal, err := strconv.ParseInt(strVal, 10, bitSize)
+	if err != nil {
+		return 0, primitiveOutOfRangeError(strVal, fmt.Sprintf("int%d", bitSize), err)
+	}
+	return intVal, nil
+}
+
+func decodeUnsignedPrimitive(strVal string, bitSize int) (uint64, error) {
+	uintVal, err := strconv.ParseUint(strVal, 10, bitSize)
+	if err != nil {
+		return 0, primitiveOutOfRangeError(strVal, fmt.Sprintf("uint%d", bitSize), err)
+	}
+	if bitSize == 64 && uintVal > uint64(math.MaxInt64) {
+		return 0, primitiveOutOfRangeError(strVal, "Spanner INT64", nil)
+	}
+	return uintVal, nil
 }
