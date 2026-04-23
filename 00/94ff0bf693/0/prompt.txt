@@ -1,0 +1,5 @@
+$code-review $use-modern-go
+
+---
+
+$autopilot "Fix 'HIGH (1): codegen/languages/go/templates/spanner_db.go.tmpl' issues"
