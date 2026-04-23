@@ -166,14 +166,14 @@ func Read{{ .Type.Name }}(ctx context.Context, db SpannerDB, keys spanner.KeySet
 	err := rows.Do(func(row *spanner.Row) error {
 		val, err := decoder(row)
 		if err != nil {
-			return err
+			return status.Errorf(codes.Internal, "failed to decode {{ .Type.Name }} row: %v", err)
 		}
 		res = append(res, val)
 
 		return nil
 	})
 	if err != nil {
-		return nil, newErrorWithCode(codes.Internal, "Read{{ .Type.Name }}", "{{ .Type.Table }}", err)
+		return nil, newError("Read{{ .Type.Name }}", "{{ .Type.Table }}", err)
 	}
 
 	return res, nil

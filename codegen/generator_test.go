@@ -497,7 +497,7 @@ func TestGenerator_Generate_UUIDImportsShareThirdPartyGroup(t *testing.T) {
 	outDir := generateFromDDL(t, root, ddl, Options{PackageName: "models"})
 	content := readTextFile(t, filepath.Join(outDir, "users.spanner.go"))
 
-	const wantImportBlock = "import (\n\t\"context\"\n\t\"fmt\"\n\n\t\"cloud.google.com/go/spanner\"\n\t\"github.com/google/uuid\"\n\t\"google.golang.org/grpc/codes\"\n)"
+	const wantImportBlock = "import (\n\t\"context\"\n\t\"fmt\"\n\n\t\"cloud.google.com/go/spanner\"\n\t\"github.com/google/uuid\"\n\t\"google.golang.org/grpc/codes\"\n\t\"google.golang.org/grpc/status\"\n)"
 	if !strings.Contains(content, wantImportBlock) {
 		t.Fatalf("users.spanner.go missing grouped UUID import block:\n%s", content)
 	}
@@ -1112,4 +1112,96 @@ func writeFixtureGoMod(t *testing.T, dir string) {
 	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
 		t.Fatalf("writing fixture go.mod %s: %v", path, err)
 	}
+}
+
+func TestGenerator_Generate_ReadErrorCodes(t *testing.T) {
+	root := newCompileFixtureRoot(t)
+	outDir := generateFromDDL(t, root, `CREATE TABLE Runs (
+		id INT64 NOT NULL,
+	) PRIMARY KEY (id)`, Options{PackageName: "models"})
+	writeTextFile(t, filepath.Join(outDir, "read_error_test.go"), `package models
+
+import (
+	"context"
+	"reflect"
+	"testing"
+	"unsafe"
+
+	"cloud.google.com/go/spanner"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+)
+
+type fakeReadErrorDB struct {
+	iter *spanner.RowIterator
+}
+
+func (db fakeReadErrorDB) Read(ctx context.Context, table string, keys spanner.KeySet, columns []string) *spanner.RowIterator {
+	return db.iter
+}
+
+func (db fakeReadErrorDB) ReadRow(ctx context.Context, table string, key spanner.Key, columns []string) (*spanner.Row, error) {
+	panic("unexpected ReadRow call")
+}
+
+func (db fakeReadErrorDB) Query(ctx context.Context, statement spanner.Statement) *spanner.RowIterator {
+	panic("unexpected Query call")
+}
+
+func setRowIteratorField(t *testing.T, iter *spanner.RowIterator, field string, value any) {
+	t.Helper()
+
+	rv := reflect.ValueOf(iter).Elem().FieldByName(field)
+	if !rv.IsValid() {
+		t.Fatalf("field %q not found on RowIterator", field)
+	}
+	reflect.NewAt(rv.Type(), unsafe.Pointer(rv.UnsafeAddr())).Elem().Set(reflect.ValueOf(value))
+}
+
+func setRowIteratorPointerField(t *testing.T, iter *spanner.RowIterator, field string) {
+	t.Helper()
+
+	rv := reflect.ValueOf(iter).Elem().FieldByName(field)
+	if !rv.IsValid() {
+		t.Fatalf("field %q not found on RowIterator", field)
+	}
+	ptr := reflect.New(rv.Type().Elem())
+	reflect.NewAt(rv.Type(), unsafe.Pointer(rv.UnsafeAddr())).Elem().Set(ptr)
+}
+
+func TestReadRunsPreservesSpannerIteratorErrorCode(t *testing.T) {
+	iter := &spanner.RowIterator{}
+	setRowIteratorPointerField(t, iter, "meterTracerFactory")
+	setRowIteratorField(t, iter, "err", status.Error(codes.Unavailable, "read failed"))
+
+	_, err := ReadRuns(t.Context(), fakeReadErrorDB{iter: iter}, spanner.AllKeys())
+	if err == nil {
+		t.Fatal("ReadRuns() error = nil, want non-nil")
+	}
+	if got := spanner.ErrCode(err); got != codes.Unavailable {
+		t.Fatalf("ReadRuns() code = %v, want %v (err=%v)", got, codes.Unavailable, err)
+	}
+}
+
+func TestReadRunsWrapsDecoderFailuresAsInternal(t *testing.T) {
+	row, err := spanner.NewRow([]string{"id"}, []any{"bad"})
+	if err != nil {
+		t.Fatalf("NewRow() error = %v", err)
+	}
+
+	iter := &spanner.RowIterator{}
+	setRowIteratorPointerField(t, iter, "meterTracerFactory")
+	setRowIteratorField(t, iter, "rows", []*spanner.Row{row})
+
+	_, err = ReadRuns(t.Context(), fakeReadErrorDB{iter: iter}, spanner.AllKeys())
+	if err == nil {
+		t.Fatal("ReadRuns() error = nil, want non-nil")
+	}
+	if got := spanner.ErrCode(err); got != codes.Internal {
+		t.Fatalf("ReadRuns() code = %v, want %v (err=%v)", got, codes.Internal, err)
+	}
+}
+`)
+
+	runGoTestDir(t, outDir)
 }
