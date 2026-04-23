@@ -41,7 +41,3 @@ Use this skill to turn the current worktree into reviewable git commits.
 - Call out skipped validation or blockers explicitly.
 
 </skill>
-
----
-
-$autopilot "Fix 'MEDIUM (1): codegen/languages/go/templates/type.go.tmpl' issues"
