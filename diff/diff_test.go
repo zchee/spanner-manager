@@ -19,7 +19,7 @@ import (
 	"testing"
 
 	"github.com/cloudspannerecosystem/memefish/ast"
-	"github.com/google/go-cmp/cmp"
+	gocmp "github.com/google/go-cmp/cmp"
 
 	"github.com/zchee/spanner-manager/sqlutil"
 )
@@ -1125,7 +1125,7 @@ CREATE TABLE T1 (id INT64);
 				t.Fatalf("Diff() error = %v", err)
 			}
 
-			if diff := cmp.Diff(tt.want, got); diff != "" {
+			if diff := gocmp.Diff(tt.want, got); diff != "" {
 				t.Errorf("Diff() mismatch (-want +got):\n%s", diff)
 			}
 		})
@@ -1318,7 +1318,7 @@ OPTIONS(distance_type='EUCLIDEAN');
 				t.Fatalf("Diff() error = %v", err)
 			}
 
-			if diff := cmp.Diff(tt.want, got); diff != "" {
+			if diff := gocmp.Diff(tt.want, got); diff != "" {
 				t.Errorf("Diff() mismatch (-want +got):\n%s", diff)
 			}
 		})
@@ -1480,7 +1480,7 @@ func TestDiff_CoverageBranches(t *testing.T) {
 				t.Fatalf("Diff() error = %v", err)
 			}
 
-			if diff := cmp.Diff(tt.want, got); diff != "" {
+			if diff := gocmp.Diff(tt.want, got); diff != "" {
 				t.Errorf("Diff() mismatch (-want +got):\n%s", diff)
 			}
 		})
@@ -1536,7 +1536,7 @@ func TestDiff_HelperCoverage(t *testing.T) {
 			`ALTER TABLE t1 ADD COLUMN uuid_id UUID NOT NULL DEFAULT (NEW_UUID())`,
 			`ALTER TABLE t1 ALTER COLUMN uuid_id DROP DEFAULT`,
 		}
-		if diff := cmp.Diff(want, got); diff != "" {
+		if diff := gocmp.Diff(want, got); diff != "" {
 			t.Fatalf("uuid add-column statements mismatch (-want +got):\n%s", diff)
 		}
 	})
@@ -1553,7 +1553,7 @@ func TestDiff_HelperCoverage(t *testing.T) {
 			`UPDATE t1 SET uuid_id = NEW_UUID() WHERE uuid_id IS NULL`,
 			`ALTER TABLE t1 ALTER COLUMN uuid_id UUID NOT NULL`,
 		}
-		if diff := cmp.Diff(want, got); diff != "" {
+		if diff := gocmp.Diff(want, got); diff != "" {
 			t.Fatalf("uuid set-not-null statements mismatch (-want +got):\n%s", diff)
 		}
 	})

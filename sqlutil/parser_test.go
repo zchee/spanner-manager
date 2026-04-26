@@ -17,7 +17,7 @@ package sqlutil
 import (
 	"testing"
 
-	"github.com/google/go-cmp/cmp"
+	gocmp "github.com/google/go-cmp/cmp"
 )
 
 func TestParseDDLs(t *testing.T) {
@@ -56,9 +56,9 @@ func TestParseDDLs(t *testing.T) {
 
 func TestParseExpr(t *testing.T) {
 	tests := map[string]struct {
-		sql      string
-		wantSQL  string
-		wantErr  bool
+		sql     string
+		wantSQL string
+		wantErr bool
 	}{
 		"success: uuid cast": {
 			sql:     `CAST("123e4567-e89b-12d3-a456-426614174000" AS UUID)`,
@@ -79,7 +79,7 @@ func TestParseExpr(t *testing.T) {
 			if tt.wantErr {
 				return
 			}
-			if diff := cmp.Diff(tt.wantSQL, expr.SQL()); diff != "" {
+			if diff := gocmp.Diff(tt.wantSQL, expr.SQL()); diff != "" {
 				t.Fatalf("ParseExpr() SQL mismatch (-want +got):\n%s", diff)
 			}
 		})
@@ -119,7 +119,7 @@ func TestSplitStatements(t *testing.T) {
 			if (err != nil) != tt.wantErr {
 				t.Fatalf("SplitStatements() error = %v, wantErr %v", err, tt.wantErr)
 			}
-			if diff := cmp.Diff(tt.expected, got); diff != "" {
+			if diff := gocmp.Diff(tt.expected, got); diff != "" {
 				t.Errorf("SplitStatements() mismatch (-want +got):\n%s", diff)
 			}
 		})

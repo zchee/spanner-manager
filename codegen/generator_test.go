@@ -23,7 +23,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/google/go-cmp/cmp"
+	gocmp "github.com/google/go-cmp/cmp"
 )
 
 func TestGenerator_Generate_BasicFiles(t *testing.T) {
@@ -56,7 +56,7 @@ func TestGenerator_Generate_BasicFiles(t *testing.T) {
 		PackageName: "models",
 		Suffix:      ".yo.go",
 	})
-	if diff := cmp.Diff([]string{"spanner_db.yo.go", "users.yo.go"}, listFiles(t, outDir)); diff != "" {
+	if diff := gocmp.Diff([]string{"spanner_db.yo.go", "users.yo.go"}, listFiles(t, outDir)); diff != "" {
 		t.Fatalf("generated files mismatch (-want +got):\n%s", diff)
 	}
 
@@ -159,7 +159,7 @@ func TestGenerator_Generate_RemovesLegacyHeaderFile(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(outDir, "spanner_header.spanner.go")); !os.IsNotExist(err) {
 		t.Fatalf("legacy header file still exists after generation: %v", err)
 	}
-	if diff := cmp.Diff([]string{"spanner_db.spanner.go", "users.spanner.go"}, listFiles(t, outDir)); diff != "" {
+	if diff := gocmp.Diff([]string{"spanner_db.spanner.go", "users.spanner.go"}, listFiles(t, outDir)); diff != "" {
 		t.Fatalf("generated files mismatch (-want +got):\n%s", diff)
 	}
 }
@@ -228,7 +228,7 @@ func Find{{ .Type.Name }}ByPrimaryKey(ctx context.Context, db SpannerDB) string 
 	}).Generate(newSimpleSchema("Users")); err != nil {
 		t.Fatalf("Generate() error = %v", err)
 	}
-	if diff := cmp.Diff([]string{"spanner_db.spanner.go", "users.spanner.go"}, listFiles(t, outDir)); diff != "" {
+	if diff := gocmp.Diff([]string{"spanner_db.spanner.go", "users.spanner.go"}, listFiles(t, outDir)); diff != "" {
 		t.Fatalf("generated files mismatch (-want +got):\n%s", diff)
 	}
 
@@ -323,7 +323,7 @@ func TestGenerator_Generate_TableSelection(t *testing.T) {
 				t.Fatalf("Generate() error = %v", err)
 			}
 
-			if diff := cmp.Diff(tt.wantFiles, listFiles(t, outDir)); diff != "" {
+			if diff := gocmp.Diff(tt.wantFiles, listFiles(t, outDir)); diff != "" {
 				t.Fatalf("generated files mismatch (-want +got):\n%s", diff)
 			}
 		})
@@ -377,7 +377,7 @@ func TestGenerator_Generate_NamingOptions(t *testing.T) {
 				t.Fatalf("Generate() error = %v", err)
 			}
 
-			if diff := cmp.Diff(tt.wantFiles, listFiles(t, outDir)); diff != "" {
+			if diff := gocmp.Diff(tt.wantFiles, listFiles(t, outDir)); diff != "" {
 				t.Fatalf("generated files mismatch (-want +got):\n%s", diff)
 			}
 
@@ -855,7 +855,7 @@ func Find{{ .Type.Name }}ByPrimaryKey(db SpannerDB) string {
 	}).Generate(newSimpleSchema("Users")); err != nil {
 		t.Fatalf("Generate() error = %v", err)
 	}
-	if diff := cmp.Diff([]string{"spanner_db.spanner.go", "users.spanner.go"}, listFiles(t, outDir)); diff != "" {
+	if diff := gocmp.Diff([]string{"spanner_db.spanner.go", "users.spanner.go"}, listFiles(t, outDir)); diff != "" {
 		t.Fatalf("generated files mismatch (-want +got):\n%s", diff)
 	}
 

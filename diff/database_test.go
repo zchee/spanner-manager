@@ -17,7 +17,7 @@ package diff
 import (
 	"testing"
 
-	"github.com/google/go-cmp/cmp"
+	gocmp "github.com/google/go-cmp/cmp"
 )
 
 func TestParseDatabase(t *testing.T) {
@@ -106,7 +106,7 @@ func TestParseDatabase_TableDetails(t *testing.T) {
 		t.Fatal("Users table not found")
 	}
 
-	if diff := cmp.Diff("Users", table.Name); diff != "" {
+	if diff := gocmp.Diff("Users", table.Name); diff != "" {
 		t.Errorf("table name mismatch (-want +got):\n%s", diff)
 	}
 
@@ -184,7 +184,7 @@ func TestParseDatabase_IndexDetails(t *testing.T) {
 	if len(idx.Columns) != 1 || idx.Columns[0].Name != "Email" {
 		t.Errorf("Columns = %v, want [Email]", idx.Columns)
 	}
-	if diff := cmp.Diff([]string{"Name"}, idx.Storing); diff != "" {
+	if diff := gocmp.Diff([]string{"Name"}, idx.Storing); diff != "" {
 		t.Errorf("Storing mismatch (-want +got):\n%s", diff)
 	}
 }

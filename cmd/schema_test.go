@@ -17,7 +17,7 @@ package cmd
 import (
 	"testing"
 
-	"github.com/google/go-cmp/cmp"
+	gocmp "github.com/google/go-cmp/cmp"
 
 	"github.com/zchee/spanner-manager/spannerutil"
 )
@@ -61,7 +61,7 @@ func TestParseSpannerURI(t *testing.T) {
 				t.Fatalf("parseSpannerURI() error = %v, wantErr %v", err, tt.wantErr)
 			}
 			if !tt.wantErr {
-				if diff := cmp.Diff(tt.expected, got); diff != "" {
+				if diff := gocmp.Diff(tt.expected, got); diff != "" {
 					t.Errorf("parseSpannerURI() mismatch (-want +got):\n%s", diff)
 				}
 			}

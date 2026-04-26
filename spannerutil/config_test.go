@@ -18,7 +18,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/go-cmp/cmp"
+	gocmp "github.com/google/go-cmp/cmp"
 )
 
 func TestConfig_DatabasePath(t *testing.T) {
@@ -43,7 +43,7 @@ func TestConfig_DatabasePath(t *testing.T) {
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
 			got := tt.config.DatabasePath()
-			if diff := cmp.Diff(tt.expected, got); diff != "" {
+			if diff := gocmp.Diff(tt.expected, got); diff != "" {
 				t.Errorf("DatabasePath() mismatch (-want +got):\n%s", diff)
 			}
 		})

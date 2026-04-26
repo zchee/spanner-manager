@@ -19,7 +19,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/google/go-cmp/cmp"
+	gocmp "github.com/google/go-cmp/cmp"
 )
 
 func TestDDLFileSource_Load(t *testing.T) {
@@ -125,7 +125,7 @@ func TestDDLFileSource_Load_ArrayAndCommitTimestamp(t *testing.T) {
 	}
 
 	got := schema.Types[0]
-	if diff := cmp.Diff([]Field{
+	if diff := gocmp.Diff([]Field{
 		{
 			Name:            "RunID",
 			ColumnName:      "RunId",
@@ -157,10 +157,10 @@ func TestDDLFileSource_Load_ArrayAndCommitTimestamp(t *testing.T) {
 		t.Fatalf("fields mismatch (-want +got):\n%s", diff)
 	}
 
-	if diff := cmp.Diff([]Field{got.Fields[0]}, got.PrimaryKeyFields); diff != "" {
+	if diff := gocmp.Diff([]Field{got.Fields[0]}, got.PrimaryKeyFields); diff != "" {
 		t.Fatalf("primary key fields mismatch (-want +got):\n%s", diff)
 	}
-	if diff := cmp.Diff([]Field{got.Fields[2]}, got.CommitTSFields); diff != "" {
+	if diff := gocmp.Diff([]Field{got.Fields[2]}, got.CommitTSFields); diff != "" {
 		t.Fatalf("commit timestamp fields mismatch (-want +got):\n%s", diff)
 	}
 }
@@ -188,7 +188,7 @@ func TestDDLFileSource_Load_UUIDColumns(t *testing.T) {
 	}
 
 	got := schema.Types[0]
-	if diff := cmp.Diff([]Field{
+	if diff := gocmp.Diff([]Field{
 		{
 			Name:            "SessionID",
 			ColumnName:      "SessionId",
@@ -218,7 +218,7 @@ func TestDDLFileSource_Load_UUIDColumns(t *testing.T) {
 	}, got.Fields); diff != "" {
 		t.Fatalf("fields mismatch (-want +got):\n%s", diff)
 	}
-	if diff := cmp.Diff([]Field{got.Fields[0]}, got.PrimaryKeyFields); diff != "" {
+	if diff := gocmp.Diff([]Field{got.Fields[0]}, got.PrimaryKeyFields); diff != "" {
 		t.Fatalf("primary key fields mismatch (-want +got):\n%s", diff)
 	}
 }
@@ -247,7 +247,7 @@ func TestDDLFileSource_Load_WritableColumnMetadata(t *testing.T) {
 	}
 
 	got := schema.Types[0]
-	if diff := cmp.Diff([]Field{
+	if diff := gocmp.Diff([]Field{
 		got.Fields[0],
 		got.Fields[1],
 		got.Fields[2],
@@ -275,10 +275,10 @@ func TestDDLFileSource_Load_WritableColumnMetadata(t *testing.T) {
 
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
-			if diff := cmp.Diff(tt.hasDefault, tt.field.HasDefault); diff != "" {
+			if diff := gocmp.Diff(tt.hasDefault, tt.field.HasDefault); diff != "" {
 				t.Fatalf("HasDefault mismatch (-want +got):\n%s", diff)
 			}
-			if diff := cmp.Diff(tt.isGenerated, tt.field.IsGenerated); diff != "" {
+			if diff := gocmp.Diff(tt.isGenerated, tt.field.IsGenerated); diff != "" {
 				t.Fatalf("IsGenerated mismatch (-want +got):\n%s", diff)
 			}
 		})
@@ -303,7 +303,7 @@ func TestSnakeToCamel(t *testing.T) {
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
 			got := snakeToCamel(tt.input)
-			if diff := cmp.Diff(tt.expected, got); diff != "" {
+			if diff := gocmp.Diff(tt.expected, got); diff != "" {
 				t.Errorf("snakeToCamel(%q) mismatch (-want +got):\n%s", tt.input, diff)
 			}
 		})

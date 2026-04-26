@@ -19,7 +19,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/google/go-cmp/cmp"
+	gocmp "github.com/google/go-cmp/cmp"
 
 	"github.com/zchee/spanner-manager/sqlutil"
 )
@@ -130,7 +130,7 @@ func TestReadMigrations(t *testing.T) {
 				t.Fatalf("ReadMigrations() error = %v, wantErr %v", err, tt.wantErr)
 			}
 
-			if diff := cmp.Diff(tt.expected, got, cmp.AllowUnexported(Migration{})); diff != "" {
+			if diff := gocmp.Diff(tt.expected, got, gocmp.AllowUnexported(Migration{})); diff != "" {
 				t.Errorf("ReadMigrations() mismatch (-want +got):\n%s", diff)
 			}
 		})

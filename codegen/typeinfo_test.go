@@ -20,7 +20,7 @@ import (
 
 	"cloud.google.com/go/spanner"
 	"github.com/cloudspannerecosystem/memefish/ast"
-	"github.com/google/go-cmp/cmp"
+	gocmp "github.com/google/go-cmp/cmp"
 )
 
 func TestDedupeImportSpecs(t *testing.T) {
@@ -52,7 +52,7 @@ func TestDedupeImportSpecs(t *testing.T) {
 
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
-			if diff := cmp.Diff(tt.want, dedupeImportSpecs(tt.imports)); diff != "" {
+			if diff := gocmp.Diff(tt.want, dedupeImportSpecs(tt.imports)); diff != "" {
 				t.Fatalf("dedupeImportSpecs() mismatch (-want +got):\n%s", diff)
 			}
 		})
@@ -92,7 +92,7 @@ func TestRefreshTypeMetadata_PreservesPrimaryKeyOrdinal(t *testing.T) {
 
 	refreshTypeMetadata(&typ)
 
-	if diff := cmp.Diff([]Field{typ.Fields[1], typ.Fields[0]}, typ.PrimaryKeyFields); diff != "" {
+	if diff := gocmp.Diff([]Field{typ.Fields[1], typ.Fields[0]}, typ.PrimaryKeyFields); diff != "" {
 		t.Fatalf("primary key fields mismatch (-want +got):\n%s", diff)
 	}
 }
@@ -118,7 +118,7 @@ func TestFieldIsWritable(t *testing.T) {
 
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
-			if diff := cmp.Diff(tt.want, tt.field.IsWritable()); diff != "" {
+			if diff := gocmp.Diff(tt.want, tt.field.IsWritable()); diff != "" {
 				t.Fatalf("IsWritable() mismatch (-want +got):\n%s", diff)
 			}
 		})
@@ -152,7 +152,7 @@ func TestRefreshTypeMetadata_PopulatesWritableFields(t *testing.T) {
 
 	refreshTypeMetadata(&typ)
 
-	if diff := cmp.Diff([]Field{typ.Fields[0], typ.Fields[1], typ.Fields[2]}, typ.WritableFields); diff != "" {
+	if diff := gocmp.Diff([]Field{typ.Fields[0], typ.Fields[1], typ.Fields[2]}, typ.WritableFields); diff != "" {
 		t.Fatalf("writable fields mismatch (-want +got):\n%s", diff)
 	}
 }
@@ -181,10 +181,10 @@ func TestFieldWriteSemanticsFromDefaultSemantics(t *testing.T) {
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
 			gotDefault, gotGen := fieldWriteSemanticsFromDefaultSemantics(tt.semantics)
-			if diff := cmp.Diff(tt.wantDefault, gotDefault); diff != "" {
+			if diff := gocmp.Diff(tt.wantDefault, gotDefault); diff != "" {
 				t.Fatalf("hasDefault mismatch (-want +got):\n%s", diff)
 			}
-			if diff := cmp.Diff(tt.wantGen, gotGen); diff != "" {
+			if diff := gocmp.Diff(tt.wantGen, gotGen); diff != "" {
 				t.Fatalf("isGenerated mismatch (-want +got):\n%s", diff)
 			}
 		})
@@ -221,10 +221,10 @@ func TestFieldWriteSemanticsFromInformationSchema(t *testing.T) {
 				spanner.NullString{StringVal: tt.columnDefault, Valid: tt.columnDefaultValid},
 				spanner.NullString{StringVal: tt.generationExpr, Valid: tt.generationExprValid},
 			)
-			if diff := cmp.Diff(tt.wantDefault, gotDefault); diff != "" {
+			if diff := gocmp.Diff(tt.wantDefault, gotDefault); diff != "" {
 				t.Fatalf("hasDefault mismatch (-want +got):\n%s", diff)
 			}
-			if diff := cmp.Diff(tt.wantGen, gotGen); diff != "" {
+			if diff := gocmp.Diff(tt.wantGen, gotGen); diff != "" {
 				t.Fatalf("isGenerated mismatch (-want +got):\n%s", diff)
 			}
 		})
@@ -338,7 +338,7 @@ func TestGoTypeForSpannerTypeString(t *testing.T) {
 			if err != nil {
 				t.Fatalf("goTypeForSpannerTypeString(%q, %v) error = %v", tt.spannerType, tt.nullable, err)
 			}
-			if diff := cmp.Diff(tt.want, got); diff != "" {
+			if diff := gocmp.Diff(tt.want, got); diff != "" {
 				t.Fatalf("goTypeForSpannerTypeString(%q, %v) mismatch (-want +got):\n%s", tt.spannerType, tt.nullable, diff)
 			}
 		})
@@ -371,7 +371,7 @@ func TestGoTypeForSchemaType_UUIDCompat(t *testing.T) {
 
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
-			if diff := cmp.Diff(tt.want, goTypeForSchemaType(tt.schemaType, tt.nullable)); diff != "" {
+			if diff := gocmp.Diff(tt.want, goTypeForSchemaType(tt.schemaType, tt.nullable)); diff != "" {
 				t.Fatalf("goTypeForSchemaType() mismatch (-want +got):\n%s", diff)
 			}
 		})
