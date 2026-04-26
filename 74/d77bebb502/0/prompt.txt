@@ -1,0 +1,1 @@
+$oh-my-codex:autopilot "add `gocmp "github.com/google/go-cmp/cmp"` import alias to all files becasue will conflict stdlib `cmp` package"

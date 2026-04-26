@@ -1,0 +1,77 @@
+{
+  "cli_version": "dev",
+  "checkpoint_id": "74d77bebb502",
+  "session_id": "019dc952-b3c5-7041-9006-e4ef10efde0e",
+  "strategy": "manual-commit",
+  "created_at": "2026-04-26T10:55:26.33962Z",
+  "branch": "main",
+  "checkpoints_count": 1,
+  "files_touched": [
+    "cmd/schema_test.go",
+    "codegen/generator_test.go",
+    "codegen/loader_test.go",
+    "codegen/typeinfo_test.go",
+    "diff/database_test.go",
+    "diff/diff_test.go",
+    "migration/migration_test.go",
+    "spannerutil/config_test.go",
+    "sqlutil/parser_test.go"
+  ],
+  "agent": "Codex",
+  "model": "gpt-5.5",
+  "turn_id": "495dbea9bc0e",
+  "token_usage": {
+    "input_tokens": 112783,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 2129408,
+    "output_tokens": 12642,
+    "api_call_count": 31
+  },
+  "session_metrics": {
+    "turn_count": 1
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-04-26T10:55:26.32713Z",
+    "agent_lines": 49,
+    "agent_removed": 49,
+    "human_added": 0,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 49,
+    "total_lines_changed": 98,
+    "agent_percentage": 100,
+    "metric_version": 2
+  },
+  "prompt_attributions": [
+    {
+      "checkpoint_number": 1,
+      "user_lines_added": 593,
+      "user_lines_removed": 0,
+      "agent_lines_added": 0,
+      "agent_lines_removed": 0,
+      "user_added_per_file": {
+        ".agent/PLANS.md": 243,
+        ".agents/plans/improve-codegen.md": 204,
+        ".envrc": 1,
+        ".omc/project-memory.json": 129,
+        ".omc/sessions/37eaa247-a76a-49bf-9ead-416b244fa606.json": 8,
+        ".omc/sessions/88b550f6-9671-4b51-b9cb-7aa11ae89b04.json": 8
+      }
+    },
+    {
+      "checkpoint_number": 2,
+      "user_lines_added": 593,
+      "user_lines_removed": 0,
+      "agent_lines_added": 49,
+      "agent_lines_removed": 49,
+      "user_added_per_file": {
+        ".agent/PLANS.md": 243,
+        ".agents/plans/improve-codegen.md": 204,
+        ".envrc": 1,
+        ".omc/project-memory.json": 129,
+        ".omc/sessions/37eaa247-a76a-49bf-9ead-416b244fa606.json": 8,
+        ".omc/sessions/88b550f6-9671-4b51-b9cb-7aa11ae89b04.json": 8
+      }
+    }
+  ]
+}
