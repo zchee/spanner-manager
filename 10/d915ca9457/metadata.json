@@ -3,7 +3,7 @@
   "checkpoint_id": "10d915ca9457",
   "strategy": "manual-commit",
   "branch": "main",
-  "checkpoints_count": 5,
+  "checkpoints_count": 6,
   "files_touched": [
     "README.md",
     "docs/spanner-ddl-support.md"
@@ -20,6 +20,10 @@
       "transcript": "/10/d915ca9457/1/full.jsonl",
       "content_hash": "/10/d915ca9457/1/content_hash.txt",
       "prompt": "/10/d915ca9457/1/prompt.txt"
+    },
+    {
+      "metadata": "/10/d915ca9457/2/metadata.json",
+      "prompt": ""
     }
   ],
   "token_usage": {
