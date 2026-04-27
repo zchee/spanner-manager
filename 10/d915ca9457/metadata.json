@@ -3,7 +3,7 @@
   "checkpoint_id": "10d915ca9457",
   "strategy": "manual-commit",
   "branch": "main",
-  "checkpoints_count": 4,
+  "checkpoints_count": 5,
   "files_touched": [
     "README.md",
     "docs/spanner-ddl-support.md"
@@ -14,13 +14,19 @@
       "transcript": "/10/d915ca9457/0/full.jsonl",
       "content_hash": "/10/d915ca9457/0/content_hash.txt",
       "prompt": "/10/d915ca9457/0/prompt.txt"
+    },
+    {
+      "metadata": "/10/d915ca9457/1/metadata.json",
+      "transcript": "/10/d915ca9457/1/full.jsonl",
+      "content_hash": "/10/d915ca9457/1/content_hash.txt",
+      "prompt": "/10/d915ca9457/1/prompt.txt"
     }
   ],
   "token_usage": {
-    "input_tokens": 274642,
+    "input_tokens": 320913,
     "cache_creation_tokens": 0,
-    "cache_read_tokens": 15295488,
-    "output_tokens": 35068,
-    "api_call_count": 122
+    "cache_read_tokens": 15298048,
+    "output_tokens": 35467,
+    "api_call_count": 123
   }
 }
