@@ -1,0 +1,13 @@
+$oh-my-codex:ask-gemini "Review this codebase strictly. Focus on the latest Spanner features, such as new DDL syntax and diff calculation algorithm (Refer (investigate) to https://github.com/cloudspannerecosystem/spanner-schema-diff-tool), etc."
+
+---
+
+$oh-my-codex:ralplan "planning fix to Gemini reviewed points"
+
+---
+
+$list-plan
+
+---
+
+$oh-my-codex:team .omx/plans/gemini-reviewed-spanner-diff-fixes.md
