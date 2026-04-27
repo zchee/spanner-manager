@@ -3,7 +3,7 @@
   "checkpoint_id": "10d915ca9457",
   "strategy": "manual-commit",
   "branch": "main",
-  "checkpoints_count": 7,
+  "checkpoints_count": 4,
   "files_touched": [
     "README.md",
     "docs/spanner-ddl-support.md"
@@ -33,11 +33,11 @@
     }
   ],
   "token_usage": {
-    "input_tokens": 342564,
+    "input_tokens": 926312,
     "cache_creation_tokens": 0,
-    "cache_read_tokens": 15325184,
-    "output_tokens": 35674,
-    "api_call_count": 124
+    "cache_read_tokens": 30732288,
+    "output_tokens": 92887,
+    "api_call_count": 243
   },
   "combined_attribution": {
     "calculated_at": "2026-04-27T15:45:07.311443Z",
