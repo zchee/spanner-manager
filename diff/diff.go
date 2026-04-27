@@ -17,6 +17,7 @@ package diff
 import (
 	"fmt"
 	"reflect"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -49,7 +50,11 @@ func Diff(from, to *Database) ([]Statement, error) {
 		droppedChangeStreamByKey: map[string]struct{}{},
 	}
 
-	return generator.generate(), nil
+	stmts := generator.generate()
+	if generator.err != nil {
+		return nil, generator.err
+	}
+	return stmts, nil
 }
 
 type generator struct {
@@ -64,6 +69,8 @@ type generator struct {
 	droppedTableByKey        map[string]struct{}
 	droppedChangeStreamByKey map[string]struct{}
 	droppedGrants            []*Grant
+
+	err error
 }
 
 type alterColumnDDL struct {
@@ -156,9 +163,14 @@ func (g *generator) generate() []Statement {
 			stmts = append(stmts, ddlStatement(sequence.Raw))
 			continue
 		}
-		if normalizeSQL(fromSequence.Raw.SQL()) != normalizeSQL(sequence.Raw.SQL()) {
-			stmts = append(stmts, ddlStatement(&ast.DropSequence{Name: fromSequence.Raw.Name}))
-			stmts = append(stmts, ddlStatement(sequence.Raw))
+		if !g.sequenceEqual(fromSequence.Raw, sequence.Raw) {
+			alter, ok := g.generateAlterSequence(fromSequence.Raw, sequence.Raw)
+			if !ok {
+				stmts = append(stmts, ddlStatement(&ast.DropSequence{Name: fromSequence.Raw.Name}))
+				stmts = append(stmts, ddlStatement(sequence.Raw))
+				continue
+			}
+			stmts = append(stmts, alter...)
 		}
 	}
 
@@ -182,6 +194,9 @@ func (g *generator) generate() []Statement {
 
 		stmts = append(stmts, g.generateDropIndexes(fromTable, toTable)...)
 		stmts = append(stmts, g.generateColumnDiffs(fromTable, toTable)...)
+		if g.err != nil {
+			return stmts
+		}
 		stmts = append(stmts, g.generateCreateIndexes(fromTable, toTable)...)
 		stmts = append(stmts, g.generateAlterIndexes(fromTable, toTable)...)
 		stmts = append(stmts, g.generateConstraintDiffs(fromTable, toTable)...)
@@ -251,8 +266,15 @@ func (g *generator) generate() []Statement {
 	}
 
 	for _, toView := range g.to.views {
-		if _, exists := g.findViewByKey(g.from.views, toView.Key); !exists {
+		fromView, exists := g.findViewByKey(g.from.views, toView.Key)
+		if !exists {
 			stmts = append(stmts, ddlStatement(toView.Raw))
+			continue
+		}
+		if g.viewEqual(fromView, toView) {
+			if g.viewHasDroppedGrant(fromView) {
+				stmts = append(stmts, g.generateReplaceView(toView)...)
+			}
 			continue
 		}
 		stmts = append(stmts, g.generateReplaceView(toView)...)
@@ -301,6 +323,13 @@ func ddlStatement(sqler interface{ SQL() string }) Statement {
 
 func dmlStatement(sqler interface{ SQL() string }) Statement {
 	return Statement{Kind: sqlutil.KindDML, SQL: sqler.SQL()}
+}
+
+func (g *generator) failf(format string, args ...any) {
+	if g.err != nil {
+		return
+	}
+	g.err = fmt.Errorf(format, args...)
 }
 
 func (g *generator) generateAlterDatabaseOptions() []Statement {
@@ -602,8 +631,19 @@ func (g *generator) generateColumnDiffs(from, to *Table) []Statement {
 				}
 				stmts = append(stmts, ddlStatement(alterColumnDDL{Table: to.Raw.Name, Def: toCol}))
 			}
-		} else {
+		} else if g.columnTypeWideningOnly(fromCol, toCol) {
+			stmts = append(stmts, ddlStatement(alterColumnDDL{Table: to.Raw.Name, Def: toCol}))
+		} else if g.columnCanUseLegacyRecreate(from, fromCol) {
 			stmts = append(stmts, g.generateDropAndCreateColumn(from, to, fromCol, toCol)...)
+		} else {
+			g.failf(
+				"unsupported column change for %s.%s: %s to %s",
+				to.Raw.Name.SQL(),
+				toCol.Name.SQL(),
+				fromCol.Type.SQL(),
+				toCol.Type.SQL(),
+			)
+			return stmts
 		}
 	}
 
@@ -1024,10 +1064,107 @@ func (g *generator) columnTypeEqual(x, y *ast.ColumnDef) bool {
 	return x.Type.SQL() == y.Type.SQL()
 }
 
+func (g *generator) columnTypeWideningOnly(x, y *ast.ColumnDef) bool {
+	if !strings.EqualFold(comparableIdent(x.Name), comparableIdent(y.Name)) ||
+		x.NotNull != y.NotNull ||
+		columnDefaultSemanticsSQL(x.DefaultSemantics) != columnDefaultSemanticsSQL(y.DefaultSemantics) ||
+		normalizeSQL(optionsSQL(x.Options)) != normalizeSQL(optionsSQL(y.Options)) ||
+		isColumnHidden(x) != isColumnHidden(y) {
+		return false
+	}
+	return isSafeSizedTypeWidening(x.Type, y.Type)
+}
+
+func (g *generator) columnCanUseLegacyRecreate(table *Table, col *ast.ColumnDef) bool {
+	columnKey := comparableIdent(col.Name)
+	if len(g.findIndexesByColumn(table.Indexes, columnKey)) > 0 {
+		return true
+	}
+	if len(g.findSearchIndexesByColumn(table.SearchIndexes, columnKey)) > 0 {
+		return true
+	}
+	for _, index := range table.VectorIndexes {
+		if comparableIdentName(index.ColumnName) == columnKey {
+			return true
+		}
+	}
+	return false
+}
+
+func isSafeSizedTypeWidening(from, to ast.SchemaType) bool {
+	fromName, fromSize, fromMax, ok := sizedStringOrBytes(from)
+	if !ok {
+		return false
+	}
+	toName, toSize, toMax, ok := sizedStringOrBytes(to)
+	if !ok || fromName != toName {
+		return false
+	}
+	if toMax {
+		return true
+	}
+	if fromMax {
+		return false
+	}
+	return toSize >= fromSize
+}
+
+func sizedStringOrBytes(t ast.SchemaType) (ast.ScalarTypeName, int, bool, bool) {
+	sized, ok := t.(*ast.SizedSchemaType)
+	if !ok {
+		return "", 0, false, false
+	}
+	if sized.Name != ast.StringTypeName && sized.Name != ast.BytesTypeName {
+		return "", 0, false, false
+	}
+	if sized.Max {
+		return sized.Name, 0, true, true
+	}
+	size, err := strconv.Atoi(sized.Size.SQL())
+	if err != nil {
+		return "", 0, false, false
+	}
+	return sized.Name, size, false, true
+}
+
 func (g *generator) constraintEqual(x, y *ast.TableConstraint) bool {
 	xSQL := normalizeConstraintSQL(x.SQL())
 	ySQL := normalizeConstraintSQL(y.SQL())
 	return strings.EqualFold(xSQL, ySQL)
+}
+
+func (g *generator) sequenceEqual(x, y *ast.CreateSequence) bool {
+	if !strings.EqualFold(comparablePath(x.Name), comparablePath(y.Name)) {
+		return false
+	}
+	if !reflect.DeepEqual(sequenceParamsSQL(x.Params), sequenceParamsSQL(y.Params)) {
+		return false
+	}
+	return g.optionsEqual(x.Options, y.Options)
+}
+
+func (g *generator) generateAlterSequence(from, to *ast.CreateSequence) ([]Statement, bool) {
+	if !reflect.DeepEqual(sequenceParamsSQL(from.Params), sequenceParamsSQL(to.Params)) {
+		return nil, false
+	}
+	options := changedOptions(from.Options, to.Options)
+	if options == nil || len(options.Records) == 0 {
+		return nil, true
+	}
+	for _, record := range options.Records {
+		if strings.EqualFold(record.Name.Name, "sequence_kind") {
+			return nil, false
+		}
+	}
+	return []Statement{ddlStatement(&ast.AlterSequence{Name: to.Name, Options: options})}, true
+}
+
+func sequenceParamsSQL(params []ast.SequenceParam) []string {
+	result := make([]string, 0, len(params))
+	for _, param := range params {
+		result = append(result, normalizeSQL(param.SQL()))
+	}
+	return result
 }
 
 func (g *generator) indexEqualIgnoringStoring(x, y *ast.CreateIndex) bool {
@@ -1147,6 +1284,22 @@ func (g *generator) columnEqual(x, y *Column) bool {
 		x.GeneratedExpr == y.GeneratedExpr &&
 		normalizeSQL(x.Options) == normalizeSQL(y.Options) &&
 		x.Hidden == y.Hidden
+}
+
+func (g *generator) viewEqual(x, y *View) bool {
+	if !strings.EqualFold(x.Key, y.Key) {
+		return false
+	}
+	return normalizeSQL(x.Raw.SQL()) == normalizeSQL(y.Raw.SQL())
+}
+
+func (g *generator) viewHasDroppedGrant(view *View) bool {
+	for _, grant := range g.from.grantsOnView(view) {
+		if _, exists := g.findGrant(g.to.grants, grant); !exists {
+			return true
+		}
+	}
+	return false
 }
 
 func (g *generator) setDefaultSemantics(col *ast.ColumnDef) *ast.ColumnDef {
@@ -1478,8 +1631,76 @@ func optionValueMap(options *ast.Options) map[string]string {
 	return result
 }
 
+func changedOptions(from, to *ast.Options) *ast.Options {
+	var records []*ast.OptionsDef
+	fromValues := optionValueMap(from)
+	toValues := optionValueMap(to)
+
+	if to != nil {
+		for _, record := range to.Records {
+			name := record.Name.Name
+			if fromValue, exists := fromValues[name]; exists && fromValue == record.Value.SQL() {
+				continue
+			}
+			records = append(records, &ast.OptionsDef{Name: record.Name, Value: record.Value})
+		}
+	}
+
+	if from != nil {
+		for _, record := range from.Records {
+			name := record.Name.Name
+			if _, exists := toValues[name]; exists {
+				continue
+			}
+			records = append(records, &ast.OptionsDef{
+				Name:  &ast.Ident{Name: name},
+				Value: &ast.NullLiteral{},
+			})
+		}
+	}
+
+	if len(records) == 0 {
+		return nil
+	}
+	return &ast.Options{Records: records}
+}
+
 func normalizeSQL(sql string) string {
-	return strings.Join(strings.Fields(strings.TrimSpace(sql)), " ")
+	var b strings.Builder
+	inString := false
+	var quote rune
+	spacePending := false
+
+	for _, r := range strings.TrimSpace(sql) {
+		if inString {
+			b.WriteRune(r)
+			if r == quote {
+				inString = false
+			}
+			continue
+		}
+
+		switch r {
+		case '\'', '"':
+			if spacePending && b.Len() > 0 {
+				b.WriteByte(' ')
+				spacePending = false
+			}
+			inString = true
+			quote = r
+			b.WriteRune(r)
+		case ' ', '\t', '\n', '\r':
+			spacePending = b.Len() > 0
+		default:
+			if spacePending && b.Len() > 0 {
+				b.WriteByte(' ')
+				spacePending = false
+			}
+			b.WriteRune(r)
+		}
+	}
+
+	return b.String()
 }
 
 func normalizeConstraintSQL(sql string) string {
