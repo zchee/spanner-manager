@@ -1325,6 +1325,197 @@ OPTIONS(distance_type='EUCLIDEAN');
 	}
 }
 
+func TestDiff_ApprovedPlanRegressions(t *testing.T) {
+	tests := []struct {
+		name              string
+		from              string
+		to                string
+		want              []Statement
+		wantErr           bool
+		forbidSQLContains []string
+	}{
+		{
+			name: "widen string length without dropping data",
+			from: `CREATE TABLE Users (UserId INT64 NOT NULL, Name STRING(36)) PRIMARY KEY(UserId);`,
+			to:   `CREATE TABLE Users (UserId INT64 NOT NULL, Name STRING(MAX)) PRIMARY KEY(UserId);`,
+			want: []Statement{
+				{Kind: sqlutil.KindDDL, SQL: `ALTER TABLE Users ALTER COLUMN Name STRING(MAX)`},
+			},
+			forbidSQLContains: []string{`DROP COLUMN`, `DROP TABLE`},
+		},
+		{
+			name:    "unsupported type change fails instead of drop recreate",
+			from:    `CREATE TABLE Users (UserId INT64 NOT NULL, ExternalId INT64) PRIMARY KEY(UserId);`,
+			to:      `CREATE TABLE Users (UserId INT64 NOT NULL, ExternalId STRING(36)) PRIMARY KEY(UserId);`,
+			wantErr: true,
+			forbidSQLContains: []string{
+				`DROP COLUMN ExternalId`,
+				`DROP TABLE Users`,
+			},
+		},
+		{
+			name: "sequence option changes are altered in place",
+			from: `
+CREATE SEQUENCE UserSeq OPTIONS (
+  sequence_kind = 'bit_reversed_positive',
+  skip_range_min = 1,
+  skip_range_max = 100
+);
+`,
+			to: `
+CREATE SEQUENCE UserSeq OPTIONS (
+  sequence_kind = 'bit_reversed_positive',
+  skip_range_min = 10,
+  skip_range_max = 1000
+);
+`,
+			want: []Statement{
+				{Kind: sqlutil.KindDDL, SQL: `ALTER SEQUENCE UserSeq SET OPTIONS (skip_range_min = 10, skip_range_max = 1000)`},
+			},
+			forbidSQLContains: []string{`DROP SEQUENCE UserSeq`},
+		},
+		{
+			name: "primary key change is the only table recreation trigger",
+			from: `CREATE TABLE Users (UserId INT64 NOT NULL, AccountId INT64 NOT NULL, Name STRING(36)) PRIMARY KEY(UserId);`,
+			to:   `CREATE TABLE Users (UserId INT64 NOT NULL, AccountId INT64 NOT NULL, Name STRING(36)) PRIMARY KEY(AccountId, UserId);`,
+			want: []Statement{
+				{Kind: sqlutil.KindDDL, SQL: `DROP TABLE Users`},
+				{Kind: sqlutil.KindDDL, SQL: "CREATE TABLE Users (\n  UserId INT64 NOT NULL,\n  AccountId INT64 NOT NULL,\n  Name STRING(36)\n) PRIMARY KEY (AccountId, UserId)"},
+			},
+		},
+		{
+			name: "interleave change recreates child after descendants",
+			from: `
+CREATE TABLE ParentA (ParentId INT64 NOT NULL) PRIMARY KEY(ParentId);
+CREATE TABLE ParentB (ParentId INT64 NOT NULL) PRIMARY KEY(ParentId);
+CREATE TABLE Child (ParentId INT64 NOT NULL, ChildId INT64 NOT NULL) PRIMARY KEY(ParentId, ChildId), INTERLEAVE IN PARENT ParentA ON DELETE CASCADE;
+`,
+			to: `
+CREATE TABLE ParentA (ParentId INT64 NOT NULL) PRIMARY KEY(ParentId);
+CREATE TABLE ParentB (ParentId INT64 NOT NULL) PRIMARY KEY(ParentId);
+CREATE TABLE Child (ParentId INT64 NOT NULL, ChildId INT64 NOT NULL) PRIMARY KEY(ParentId, ChildId), INTERLEAVE IN PARENT ParentB ON DELETE NO ACTION;
+`,
+			want: []Statement{
+				{Kind: sqlutil.KindDDL, SQL: `DROP TABLE Child`},
+				{Kind: sqlutil.KindDDL, SQL: "CREATE TABLE Child (\n  ParentId INT64 NOT NULL,\n  ChildId INT64 NOT NULL\n) PRIMARY KEY (ParentId, ChildId),\n  INTERLEAVE IN PARENT ParentB ON DELETE NO ACTION"},
+			},
+		},
+		{
+			name: "stable named constraint identity with explicit no action",
+			from: `
+CREATE TABLE Albums (AlbumId INT64 NOT NULL) PRIMARY KEY(AlbumId);
+CREATE TABLE Singers (
+  SingerId INT64 NOT NULL,
+  AlbumId INT64,
+  CONSTRAINT FK_Albums FOREIGN KEY (AlbumId) REFERENCES Albums (AlbumId)
+) PRIMARY KEY(SingerId);
+`,
+			to: `
+CREATE TABLE Albums (AlbumId INT64 NOT NULL) PRIMARY KEY(AlbumId);
+CREATE TABLE Singers (
+  SingerId INT64 NOT NULL,
+  AlbumId INT64,
+  CONSTRAINT FK_Albums FOREIGN KEY (AlbumId) REFERENCES Albums (AlbumId) ON DELETE NO ACTION
+) PRIMARY KEY(SingerId);
+`,
+			want: nil,
+			forbidSQLContains: []string{
+				`DROP CONSTRAINT FK_Albums`,
+				`ADD CONSTRAINT FK_Albums`,
+			},
+		},
+		{
+			name: "unchanged view does not emit create or replace",
+			from: `
+CREATE TABLE Users (UserId INT64 NOT NULL, Name STRING(MAX)) PRIMARY KEY(UserId);
+CREATE VIEW ActiveUsers SQL SECURITY INVOKER AS SELECT UserId, Name FROM Users WHERE Name IS NOT NULL;
+`,
+			to: `
+CREATE TABLE Users (UserId INT64 NOT NULL, Name STRING(MAX)) PRIMARY KEY(UserId);
+CREATE VIEW ActiveUsers SQL SECURITY INVOKER AS SELECT UserId, Name FROM Users WHERE Name IS NOT NULL;
+`,
+			want:              nil,
+			forbidSQLContains: []string{`CREATE OR REPLACE VIEW ActiveUsers`},
+		},
+		{
+			name: "view literal whitespace changes are not normalized away",
+			from: `
+CREATE TABLE Users (UserId INT64 NOT NULL) PRIMARY KEY(UserId);
+CREATE VIEW LiteralView SQL SECURITY INVOKER AS SELECT "active  user" AS label FROM Users;
+`,
+			to: `
+CREATE TABLE Users (UserId INT64 NOT NULL) PRIMARY KEY(UserId);
+CREATE VIEW LiteralView SQL SECURITY INVOKER AS SELECT "active user" AS label FROM Users;
+`,
+			want: []Statement{
+				{Kind: sqlutil.KindDDL, SQL: `CREATE OR REPLACE VIEW LiteralView SQL SECURITY INVOKER AS SELECT "active user" AS label FROM Users`},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			from := mustParseDatabaseFromString(t, tt.from)
+			to := mustParseDatabaseFromString(t, tt.to)
+
+			got, err := Diff(from, to)
+			if tt.wantErr {
+				if err == nil {
+					t.Fatalf("Diff() error = nil, want error; statements = %#v", got)
+				}
+			} else if err != nil {
+				t.Fatalf("Diff() error = %v", err)
+			}
+
+			for _, forbidden := range tt.forbidSQLContains {
+				for _, stmt := range got {
+					if strings.Contains(stmt.SQL, forbidden) {
+						t.Fatalf("Diff() emitted forbidden SQL %q in statement %q", forbidden, stmt.SQL)
+					}
+				}
+			}
+
+			if tt.wantErr {
+				return
+			}
+			if diff := gocmp.Diff(tt.want, got); diff != "" {
+				t.Fatalf("Diff() mismatch (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+func TestParseDatabase_UnsupportedModernDDLReturnsError(t *testing.T) {
+	tests := []struct {
+		name string
+		ddl  string
+	}{
+		{
+			name: "locality group",
+			ddl:  `CREATE LOCALITY GROUP hot OPTIONS (storage = 'ssd');`,
+		},
+		{
+			name: "property graph",
+			ddl: `
+CREATE TABLE Users (UserId INT64 NOT NULL) PRIMARY KEY(UserId);
+CREATE PROPERTY GRAPH UserGraph NODE TABLES (Users);
+`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			stmts, err := sqlutil.SplitStatements(strings.TrimSpace(tt.ddl))
+			if err != nil {
+				t.Fatalf("SplitStatements() error = %v", err)
+			}
+			if _, err := ParseDatabase(stmts); err == nil {
+				t.Fatalf("ParseDatabase() error = nil, want unsupported DDL error")
+			}
+		})
+	}
+}
+
 func TestDiff_CoverageBranches(t *testing.T) {
 	tests := []struct {
 		name string
@@ -1569,6 +1760,10 @@ func TestDiff_HelperCoverage(t *testing.T) {
 
 		if got := normalizeConstraintSQL(`CONSTRAINT fk FOREIGN KEY (c) REFERENCES p (id) ON DELETE NO ACTION`); got != `CONSTRAINT fk FOREIGN KEY (c) REFERENCES p (id)` {
 			t.Fatalf("normalizeConstraintSQL() = %q", got)
+		}
+
+		if got := normalizeSQL(`DEFAULT ("a  b")`); got != `DEFAULT ("a  b")` {
+			t.Fatalf("normalizeSQL() collapsed whitespace inside string literal: %q", got)
 		}
 
 		if got := normalizeOnDelete(""); got != "NO ACTION" {

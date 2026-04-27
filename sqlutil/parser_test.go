@@ -103,6 +103,14 @@ func TestSplitStatements(t *testing.T) {
 				"CREATE TABLE B (Y INT64) PRIMARY KEY (Y)",
 			},
 		},
+		"success: semicolon inside string literal": {
+			sql: `CREATE TABLE Logs (LogId INT64 NOT NULL, Message STRING(MAX) DEFAULT ("first;second")) PRIMARY KEY (LogId);
+CREATE TABLE Users (UserId INT64 NOT NULL) PRIMARY KEY (UserId)`,
+			expected: []string{
+				`CREATE TABLE Logs (LogId INT64 NOT NULL, Message STRING(MAX) DEFAULT ("first;second")) PRIMARY KEY (LogId)`,
+				"CREATE TABLE Users (UserId INT64 NOT NULL) PRIMARY KEY (UserId)",
+			},
+		},
 		"success: empty input": {
 			sql:      "",
 			expected: []string{},
