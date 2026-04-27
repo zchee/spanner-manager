@@ -54,6 +54,47 @@ func TestParseDDLs(t *testing.T) {
 	}
 }
 
+func TestParseStatements(t *testing.T) {
+	tests := map[string]struct {
+		sql     string
+		wantSQL []string
+		wantErr bool
+	}{
+		"success: mixed DDL and DML statements": {
+			sql: `CREATE TABLE Users (UserId INT64 NOT NULL) PRIMARY KEY (UserId);
+INSERT INTO Users (UserId) VALUES (1)`,
+			wantSQL: []string{
+				"CREATE TABLE Users (\n  UserId INT64 NOT NULL\n) PRIMARY KEY (UserId)",
+				"INSERT INTO Users (UserId) VALUES (1)",
+			},
+		},
+		"error: invalid statement": {
+			sql:     "NOT VALID SQL",
+			wantErr: true,
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			stmts, err := ParseStatements(tt.sql)
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("ParseStatements() error = %v, wantErr %v", err, tt.wantErr)
+			}
+			if tt.wantErr {
+				return
+			}
+
+			got := make([]string, 0, len(stmts))
+			for _, stmt := range stmts {
+				got = append(got, stmt.SQL())
+			}
+			if diff := gocmp.Diff(tt.wantSQL, got); diff != "" {
+				t.Fatalf("ParseStatements() SQL mismatch (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
 func TestParseExpr(t *testing.T) {
 	tests := map[string]struct {
 		sql     string
