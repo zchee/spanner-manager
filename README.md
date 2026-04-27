@@ -194,6 +194,10 @@ spanner-manager schema diff \
 spanner-manager schema apply desired.sql -p my-project -i my-instance -d my-db
 ```
 
+The current DDL support matrix, unsupported/fail-loud policy, live validation
+gaps, and destructive-change guardrails are maintained in
+[docs/spanner-ddl-support.md](docs/spanner-ddl-support.md).
+
 The diff engine operates in phases to ensure correctness:
 
 1. Drop indexes that no longer exist or have changed
