@@ -1,0 +1,117 @@
+{
+  "cli_version": "dev",
+  "checkpoint_id": "10d915ca9457",
+  "session_id": "019dca24-b540-74e2-98f5-a72e3ff37b08",
+  "strategy": "manual-commit",
+  "created_at": "2026-04-27T15:45:06.762061Z",
+  "branch": "main",
+  "checkpoints_count": 4,
+  "files_touched": [
+    "README.md",
+    "docs/spanner-ddl-support.md"
+  ],
+  "agent": "Codex",
+  "model": "gpt-5.5",
+  "turn_id": "8e53eaf8de18",
+  "checkpoint_transcript_start": 671,
+  "transcript_lines_at_start": 671,
+  "token_usage": {
+    "input_tokens": 274642,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 15295488,
+    "output_tokens": 35068,
+    "api_call_count": 122
+  },
+  "session_metrics": {
+    "turn_count": 8
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-04-27T15:45:06.694542Z",
+    "agent_lines": 117,
+    "agent_removed": 119,
+    "human_added": 0,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 117,
+    "total_lines_changed": 236,
+    "agent_percentage": 100,
+    "metric_version": 2
+  },
+  "prompt_attributions": [
+    {
+      "checkpoint_number": 1,
+      "user_lines_added": 593,
+      "user_lines_removed": 0,
+      "agent_lines_added": 0,
+      "agent_lines_removed": 0,
+      "user_added_per_file": {
+        ".agent/PLANS.md": 243,
+        ".agents/plans/improve-codegen.md": 204,
+        ".envrc": 1,
+        ".omc/project-memory.json": 129,
+        ".omc/sessions/37eaa247-a76a-49bf-9ead-416b244fa606.json": 8,
+        ".omc/sessions/88b550f6-9671-4b51-b9cb-7aa11ae89b04.json": 8
+      }
+    },
+    {
+      "checkpoint_number": 2,
+      "user_lines_added": 593,
+      "user_lines_removed": 0,
+      "agent_lines_added": 116,
+      "agent_lines_removed": 119,
+      "user_added_per_file": {
+        ".agent/PLANS.md": 243,
+        ".agents/plans/improve-codegen.md": 204,
+        ".envrc": 1,
+        ".omc/project-memory.json": 129,
+        ".omc/sessions/37eaa247-a76a-49bf-9ead-416b244fa606.json": 8,
+        ".omc/sessions/88b550f6-9671-4b51-b9cb-7aa11ae89b04.json": 8
+      }
+    },
+    {
+      "checkpoint_number": 3,
+      "user_lines_added": 593,
+      "user_lines_removed": 0,
+      "agent_lines_added": 117,
+      "agent_lines_removed": 119,
+      "user_added_per_file": {
+        ".agent/PLANS.md": 243,
+        ".agents/plans/improve-codegen.md": 204,
+        ".envrc": 1,
+        ".omc/project-memory.json": 129,
+        ".omc/sessions/37eaa247-a76a-49bf-9ead-416b244fa606.json": 8,
+        ".omc/sessions/88b550f6-9671-4b51-b9cb-7aa11ae89b04.json": 8
+      }
+    },
+    {
+      "checkpoint_number": 4,
+      "user_lines_added": 593,
+      "user_lines_removed": 0,
+      "agent_lines_added": 117,
+      "agent_lines_removed": 119,
+      "user_added_per_file": {
+        ".agent/PLANS.md": 243,
+        ".agents/plans/improve-codegen.md": 204,
+        ".envrc": 1,
+        ".omc/project-memory.json": 129,
+        ".omc/sessions/37eaa247-a76a-49bf-9ead-416b244fa606.json": 8,
+        ".omc/sessions/88b550f6-9671-4b51-b9cb-7aa11ae89b04.json": 8
+      }
+    },
+    {
+      "checkpoint_number": 5,
+      "user_lines_added": 593,
+      "user_lines_removed": 0,
+      "agent_lines_added": 158,
+      "agent_lines_removed": 119,
+      "user_added_per_file": {
+        ".agent/PLANS.md": 243,
+        ".agents/plans/improve-codegen.md": 204,
+        ".envrc": 1,
+        ".omc/project-memory.json": 129,
+        ".omc/sessions/37eaa247-a76a-49bf-9ead-416b244fa606.json": 8,
+        ".omc/sessions/88b550f6-9671-4b51-b9cb-7aa11ae89b04.json": 8
+      }
+    }
+  ]
+}
