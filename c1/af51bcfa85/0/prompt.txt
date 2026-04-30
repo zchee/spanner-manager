@@ -41,3 +41,7 @@ Use this skill to turn the current worktree into reviewable git commits.
 - Call out skipped validation or blockers explicitly.
 
 </skill>
+
+---
+
+$oh-my-codex:autopilot "`db reset` subcommand does not show progress, fix it"

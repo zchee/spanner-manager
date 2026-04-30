@@ -3,44 +3,59 @@
   "checkpoint_id": "c1af51bcfa85",
   "session_id": "019ddfcf-524d-7d53-b277-c54b02da7d1d",
   "strategy": "manual-commit",
-  "created_at": "2026-04-30T19:30:44.000607Z",
+  "created_at": "2026-04-30T19:39:02.56201Z",
   "branch": "refactor",
-  "checkpoints_count": 0,
+  "checkpoints_count": 1,
   "files_touched": [
     "cmd/db.go",
-    "cmd/db_test.go",
-    "cmd/instance.go",
-    "cmd/instance_test.go",
     "cmd/progress.go",
-    "cmd/progress_test.go",
-    "go.mod",
-    "go.sum"
+    "cmd/progress_test.go"
   ],
   "agent": "Codex",
   "model": "gpt-5.5",
-  "turn_id": "58b81451df27",
-  "checkpoint_transcript_start": 463,
-  "transcript_lines_at_start": 463,
+  "turn_id": "aa9dee3244d8",
+  "checkpoint_transcript_start": 479,
+  "transcript_lines_at_start": 479,
   "token_usage": {
-    "input_tokens": 1030,
+    "input_tokens": 40307,
     "cache_creation_tokens": 0,
-    "cache_read_tokens": 145920,
-    "output_tokens": 579,
-    "api_call_count": 1
+    "cache_read_tokens": 2519552,
+    "output_tokens": 10978,
+    "api_call_count": 17
   },
   "session_metrics": {
-    "turn_count": 1
+    "turn_count": 3
   },
   "initial_attribution": {
-    "calculated_at": "2026-04-30T19:30:43.981514Z",
-    "agent_lines": 0,
-    "agent_removed": 0,
-    "human_added": 0,
+    "calculated_at": "2026-04-30T19:39:02.542145Z",
+    "agent_lines": 88,
+    "agent_removed": 2,
+    "human_added": 173,
     "human_modified": 0,
     "human_removed": 0,
-    "total_committed": 0,
-    "total_lines_changed": 0,
-    "agent_percentage": 0,
+    "total_committed": 261,
+    "total_lines_changed": 276,
+    "agent_percentage": 32.608695652173914,
     "metric_version": 2
-  }
+  },
+  "prompt_attributions": [
+    {
+      "checkpoint_number": 1,
+      "user_lines_added": 670,
+      "user_lines_removed": 0,
+      "agent_lines_added": 0,
+      "agent_lines_removed": 0,
+      "user_added_per_file": {
+        ".agent/PLANS.md": 243,
+        ".agents/plans/improve-codegen.md": 204,
+        ".envrc": 1,
+        ".omc/project-memory.json": 184,
+        ".omc/sessions/37eaa247-a76a-49bf-9ead-416b244fa606.json": 8,
+        ".omc/sessions/616b68d0-9d15-479c-a540-9e6fcb4193a2.json": 8,
+        ".omc/sessions/88b550f6-9671-4b51-b9cb-7aa11ae89b04.json": 8,
+        ".omc/sessions/a567c6d0-b3d0-46a4-88ec-7ba8cc07cfe4.json": 8,
+        ".omc/state/sessions/a567c6d0-b3d0-46a4-88ec-7ba8cc07cfe4/hud-state.json": 6
+      }
+    }
+  ]
 }
