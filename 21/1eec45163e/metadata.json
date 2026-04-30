@@ -1,0 +1,34 @@
+{
+  "cli_version": "dev",
+  "checkpoint_id": "211eec45163e",
+  "strategy": "manual-commit",
+  "checkpoints_count": 0,
+  "files_touched": [
+    "codegen/testdata/generated-1341805339/models/go.mod",
+    "codegen/testdata/generated-1341805339/models/go.sum",
+    "codegen/testdata/generated-1341805339/models/spanner_db.spanner.go",
+    "codegen/testdata/generated-1341805339/models/users.spanner.go",
+    "codegen/testdata/generated-1341805339/schema.sql",
+    "codegen/testdata/generated-2572097670/models/go.mod",
+    "codegen/testdata/generated-2572097670/models/go.sum",
+    "codegen/testdata/generated-2572097670/models/primitive_bounds_test.go",
+    "codegen/testdata/generated-2572097670/models/runs.spanner.go",
+    "codegen/testdata/generated-2572097670/models/spanner_db.spanner.go",
+    "codegen/testdata/generated-2572097670/schema.sql"
+  ],
+  "sessions": [
+    {
+      "metadata": "/21/1eec45163e/0/metadata.json",
+      "transcript": "/21/1eec45163e/0/full.jsonl",
+      "content_hash": "/21/1eec45163e/0/content_hash.txt",
+      "prompt": ""
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 407,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 177152,
+    "output_tokens": 62,
+    "api_call_count": 2
+  }
+}
