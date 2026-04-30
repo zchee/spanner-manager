@@ -15,7 +15,7 @@
 package cmd
 
 import (
-	"context"
+	"bytes"
 	"io"
 	"strings"
 	"testing"
@@ -83,12 +83,43 @@ func TestDBCommandsRequireCompleteDatabaseTarget(t *testing.T) {
 
 	for name, command := range tests {
 		t.Run(name, func(t *testing.T) {
-			err := executeDBCommandForTest(t, command)
+			var stderr bytes.Buffer
+			err := executeDBCommandForTest(t, command, withCommandErr(&stderr))
 			if err == nil {
 				t.Fatal("command succeeded with incomplete database target, want validation error")
 			}
 			if got := err.Error(); got != "invalid config: database is required" {
 				t.Fatalf("error mismatch (-want +got):\n%s", gocmp.Diff("invalid config: database is required", got))
+			}
+			if got := stderr.String(); got != "" {
+				t.Fatalf("stderr = %q, want no progress before validation succeeds", got)
+			}
+		})
+	}
+}
+
+func TestDestructiveDBCommandsDoNotReportProgressWithoutForce(t *testing.T) {
+	flags := &globalFlags{
+		project:  "test-project",
+		instance: "test-instance",
+		database: "test-database",
+	}
+
+	tests := map[string]*cobra.Command{
+		"drop":     newDBDropCmd(flags),
+		"reset":    newDBResetCmd(flags),
+		"truncate": newDBTruncateCmd(flags),
+	}
+
+	for name, command := range tests {
+		t.Run(name, func(t *testing.T) {
+			var stderr bytes.Buffer
+			err := executeDBCommandForTest(t, command, withCommandErr(&stderr))
+			if err == nil {
+				t.Fatal("command succeeded without --force, want safety error")
+			}
+			if got := stderr.String(); got != "" {
+				t.Fatalf("stderr = %q, want no progress before destructive confirmation succeeds", got)
 			}
 		})
 	}
@@ -184,13 +215,34 @@ func TestTopologicalSortOrdersChildrenBeforeParents(t *testing.T) {
 	}
 }
 
-func executeDBCommandForTest(t *testing.T, command *cobra.Command, args ...string) error {
+type commandTestOption func(*cobra.Command)
+
+func withCommandErr(w io.Writer) commandTestOption {
+	return func(command *cobra.Command) {
+		command.SetErr(w)
+	}
+}
+
+func executeDBCommandForTest(t *testing.T, command *cobra.Command, optsOrArgs ...any) error {
 	t.Helper()
 
-	command.SetArgs(args)
-	command.SetContext(context.Background())
 	command.SetOut(io.Discard)
 	command.SetErr(io.Discard)
+
+	var args []string
+	for _, optOrArg := range optsOrArgs {
+		switch v := optOrArg.(type) {
+		case commandTestOption:
+			v(command)
+		case string:
+			args = append(args, v)
+		default:
+			t.Fatalf("unsupported test command option %T", optOrArg)
+		}
+	}
+
+	command.SetArgs(args)
+	command.SetContext(t.Context())
 	command.SilenceUsage = true
 	command.SilenceErrors = true
 

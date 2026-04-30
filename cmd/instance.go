@@ -46,23 +46,35 @@ func newInstanceCreateCmd(flags *globalFlags) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "create",
 		Short: "Create a Spanner instance",
-		RunE: func(cmd *cobra.Command, args []string) error {
+		RunE: func(cmd *cobra.Command, args []string) (err error) {
 			ctx := cmd.Context()
 			cfg := flags.spannerConfig()
+
+			if err := requireInstanceConfig(cfg); err != nil {
+				return err
+			}
+
+			if err := writeProgress(cmd, "Creating instance: %s", cfg.InstancePath()); err != nil {
+				return err
+			}
 
 			client, err := spannerutil.NewAdminClient(ctx, cfg)
 			if err != nil {
 				return err
 			}
-			defer client.Close()
+			defer func() {
+				if cerr := client.Close(); cerr != nil && err == nil {
+					err = cerr
+				}
+			}()
 
 			displayName := cfg.Instance
 			if err := client.CreateInstance(ctx, displayName, configID, nodes); err != nil {
 				return err
 			}
 
-			fmt.Fprintf(cmd.OutOrStdout(), "Created instance: %s\n", cfg.InstancePath())
-			return nil
+			_, err = fmt.Fprintf(cmd.OutOrStdout(), "Created instance: %s\n", cfg.InstancePath())
+			return err
 		},
 	}
 
@@ -76,22 +88,34 @@ func newInstanceDeleteCmd(flags *globalFlags) *cobra.Command {
 	return &cobra.Command{
 		Use:   "delete",
 		Short: "Delete a Spanner instance",
-		RunE: func(cmd *cobra.Command, args []string) error {
+		RunE: func(cmd *cobra.Command, args []string) (err error) {
 			ctx := cmd.Context()
 			cfg := flags.spannerConfig()
+
+			if err := requireInstanceConfig(cfg); err != nil {
+				return err
+			}
+
+			if err := writeProgress(cmd, "Deleting instance: %s", cfg.InstancePath()); err != nil {
+				return err
+			}
 
 			client, err := spannerutil.NewAdminClient(ctx, cfg)
 			if err != nil {
 				return err
 			}
-			defer client.Close()
+			defer func() {
+				if cerr := client.Close(); cerr != nil && err == nil {
+					err = cerr
+				}
+			}()
 
 			if err := client.DeleteInstance(ctx); err != nil {
 				return err
 			}
 
-			fmt.Fprintf(cmd.OutOrStdout(), "Deleted instance: %s\n", cfg.InstancePath())
-			return nil
+			_, err = fmt.Fprintf(cmd.OutOrStdout(), "Deleted instance: %s\n", cfg.InstancePath())
+			return err
 		},
 	}
 }

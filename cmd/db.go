@@ -61,8 +61,15 @@ func newDBCreateCmd(flags *globalFlags) *cobra.Command {
 				return err
 			}
 
+			if err := writeProgress(cmd, "Creating database: %s", cfg.DatabasePath()); err != nil {
+				return err
+			}
+
 			var statements []string
 			if schemaFile != "" {
+				if err := writeProgress(cmd, "Loading schema file: %s", schemaFile); err != nil {
+					return err
+				}
 				data, err := os.ReadFile(schemaFile)
 				if err != nil {
 					return fmt.Errorf("reading schema file: %w", err)
@@ -120,6 +127,10 @@ func newDBDropCmd(flags *globalFlags) *cobra.Command {
 				return err
 			}
 
+			if err := writeProgress(cmd, "Dropping database: %s", cfg.DatabasePath()); err != nil {
+				return err
+			}
+
 			client, err := spannerutil.NewAdminClient(ctx, cfg)
 			if err != nil {
 				return err
@@ -168,6 +179,10 @@ func newDBResetCmd(flags *globalFlags) *cobra.Command {
 				return err
 			}
 
+			if err := writeProgress(cmd, "Resetting database: %s", cfg.DatabasePath()); err != nil {
+				return err
+			}
+
 			client, err := spannerutil.NewAdminClient(ctx, cfg)
 			if err != nil {
 				return err
@@ -178,13 +193,22 @@ func newDBResetCmd(flags *globalFlags) *cobra.Command {
 				}
 			}()
 
+			if err := writeProgress(cmd, "Dropping database if it exists: %s", cfg.DatabasePath()); err != nil {
+				return err
+			}
+
 			// Drop (ignore error if database doesn't exist).
-			if err := client.DropDatabase(ctx); err != nil && spanner.ErrCode(err) != codes.NotFound {
+			if err := runWithProgress(cmd, "Dropping database if it exists", func() error {
+				return client.DropDatabase(ctx)
+			}); err != nil && spanner.ErrCode(err) != codes.NotFound {
 				return err
 			}
 
 			var statements []string
 			if schemaFile != "" {
+				if err := writeProgress(cmd, "Loading schema file: %s", schemaFile); err != nil {
+					return err
+				}
 				data, err := os.ReadFile(schemaFile)
 				if err != nil {
 					return fmt.Errorf("reading schema file: %w", err)
@@ -196,7 +220,13 @@ func newDBResetCmd(flags *globalFlags) *cobra.Command {
 				statements = stmts
 			}
 
-			if err := client.CreateDatabase(ctx, statements); err != nil {
+			if err := writeProgress(cmd, "Creating database: %s", cfg.DatabasePath()); err != nil {
+				return err
+			}
+
+			if err := runWithProgress(cmd, "Creating database", func() error {
+				return client.CreateDatabase(ctx, statements)
+			}); err != nil {
 				return err
 			}
 
@@ -233,6 +263,10 @@ func newDBTruncateCmd(flags *globalFlags) *cobra.Command {
 				return err
 			}
 
+			if err := writeProgress(cmd, "Truncating database: %s", cfg.DatabasePath()); err != nil {
+				return err
+			}
+
 			client, err := spannerutil.NewClient(ctx, cfg)
 			if err != nil {
 				return err
@@ -266,8 +300,15 @@ func newDBTruncateCmd(flags *globalFlags) *cobra.Command {
 			// Build deletion order: child tables before parent tables.
 			ordered := topologicalSort(tables)
 
+			if err := writeProgress(cmd, "Deleting rows from %d table(s)", len(ordered)); err != nil {
+				return err
+			}
+
 			// Truncate each table.
 			for _, name := range ordered {
+				if err := writeProgress(cmd, "Deleting rows from table: %s", name); err != nil {
+					return err
+				}
 				if _, err := client.ApplyPartitionedDML(ctx, fmt.Sprintf("DELETE FROM `%s` WHERE true", name)); err != nil {
 					return fmt.Errorf("truncating table %s: %w", name, err)
 				}
@@ -301,6 +342,10 @@ func newDBLoadCmd(flags *globalFlags) *cobra.Command {
 				return err
 			}
 
+			if err := writeProgress(cmd, "Loading database DDL: %s", cfg.DatabasePath()); err != nil {
+				return err
+			}
+
 			client, err := spannerutil.NewAdminClient(ctx, cfg)
 			if err != nil {
 				return err
@@ -322,6 +367,9 @@ func newDBLoadCmd(flags *globalFlags) *cobra.Command {
 			}
 
 			if outputFile != "" {
+				if err := writeProgress(cmd, "Writing DDL output: %s", outputFile); err != nil {
+					return err
+				}
 				if err := os.WriteFile(outputFile, []byte(output.String()), 0o644); err != nil {
 					return fmt.Errorf("writing output file: %w", err)
 				}
@@ -358,6 +406,13 @@ func requireDestructiveConfirmation(operation string, cfg spannerutil.Config, fo
 
 func requireDatabaseConfig(cfg spannerutil.Config) error {
 	if err := cfg.Validate(); err != nil {
+		return fmt.Errorf("invalid config: %w", err)
+	}
+	return nil
+}
+
+func requireInstanceConfig(cfg spannerutil.Config) error {
+	if err := cfg.ValidateInstance(); err != nil {
 		return fmt.Errorf("invalid config: %w", err)
 	}
 	return nil
