@@ -285,6 +285,85 @@ func TestDDLFileSource_Load_WritableColumnMetadata(t *testing.T) {
 	}
 }
 
+func TestApplyPrimaryKeyOrderPreservesInformationSchemaOrder(t *testing.T) {
+	typ := &Type{
+		Name:  "Memberships",
+		Table: "Memberships",
+		Fields: []Field{
+			{
+				Name:            "TenantID",
+				ColumnName:      "TenantId",
+				GoType:          "int64",
+				SpannerType:     "INT64",
+				BaseSpannerType: "INT64",
+				NotNull:         true,
+			},
+			{
+				Name:            "UserID",
+				ColumnName:      "UserId",
+				GoType:          "int64",
+				SpannerType:     "INT64",
+				BaseSpannerType: "INT64",
+				NotNull:         true,
+			},
+			{
+				Name:            "Role",
+				ColumnName:      "Role",
+				GoType:          "string",
+				SpannerType:     "STRING(MAX)",
+				BaseSpannerType: "STRING",
+				NotNull:         true,
+			},
+		},
+	}
+
+	applyPrimaryKeyOrder(typ, []string{"UserId", "TenantId"})
+
+	if diff := gocmp.Diff([]Field{typ.Fields[1], typ.Fields[0]}, typ.PrimaryKeyFields); diff != "" {
+		t.Fatalf("primary key fields mismatch (-want +got):\n%s", diff)
+	}
+	if !typ.Fields[1].IsPrimaryKey || !typ.Fields[0].IsPrimaryKey {
+		t.Fatalf("primary key flags = (%v, %v), want both true", typ.Fields[1].IsPrimaryKey, typ.Fields[0].IsPrimaryKey)
+	}
+	if typ.Fields[2].IsPrimaryKey {
+		t.Fatalf("non-key field IsPrimaryKey = true, want false")
+	}
+}
+
+func TestApplyPrimaryKeyOrderClearsStalePrimaryKeyMetadata(t *testing.T) {
+	typ := &Type{
+		Name: "Memberships",
+		Fields: []Field{
+			{
+				Name:         "TenantID",
+				ColumnName:   "TenantId",
+				IsPrimaryKey: true,
+			},
+			{
+				Name:       "Role",
+				ColumnName: "Role",
+			},
+		},
+		PrimaryKeyFields: []Field{
+			{
+				Name:       "TenantID",
+				ColumnName: "TenantId",
+			},
+		},
+	}
+
+	applyPrimaryKeyOrder(typ, nil)
+
+	if len(typ.PrimaryKeyFields) != 0 {
+		t.Fatalf("PrimaryKeyFields length = %d, want 0", len(typ.PrimaryKeyFields))
+	}
+	for _, field := range typ.Fields {
+		if field.IsPrimaryKey {
+			t.Fatalf("field %s IsPrimaryKey = true, want false", field.ColumnName)
+		}
+	}
+}
+
 func TestSnakeToCamel(t *testing.T) {
 	tests := map[string]struct {
 		input    string

@@ -17,7 +17,6 @@ package spannerutil
 import (
 	"context"
 	"fmt"
-	"os"
 
 	"cloud.google.com/go/spanner"
 	database "cloud.google.com/go/spanner/admin/database/apiv1"
@@ -258,8 +257,11 @@ func clientOptions(cfg Config) ([]option.ClientOption, error) {
 	var opts []option.ClientOption
 
 	if cfg.IsEmulator() {
-		// For the emulator, set the environment variable and use insecure credentials.
-		os.Setenv("SPANNER_EMULATOR_HOST", cfg.EmulatorHost)
+		if cfg.CredentialsFile != "" {
+			return nil, fmt.Errorf("emulator host and credentials file are mutually exclusive")
+		}
+		// For the emulator, route explicitly and use insecure credentials without
+		// mutating process-wide SPANNER_EMULATOR_HOST.
 		opts = append(opts,
 			option.WithEndpoint(cfg.EmulatorHost),
 			option.WithGRPCDialOption(grpc.WithTransportCredentials(insecure.NewCredentials())),

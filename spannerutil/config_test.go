@@ -15,6 +15,8 @@
 package spannerutil
 
 import (
+	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -182,5 +184,34 @@ func TestConfig_ValidateInstance(t *testing.T) {
 				t.Errorf("ValidateInstance() error = %v, wantErr %v", err, tt.wantErr)
 			}
 		})
+	}
+}
+
+func TestClientOptions_EmulatorDoesNotMutateEnvironment(t *testing.T) {
+	const existingHost = "existing-emulator:9010"
+	t.Setenv("SPANNER_EMULATOR_HOST", existingHost)
+
+	opts, err := clientOptions(Config{EmulatorHost: "localhost:9010"})
+	if err != nil {
+		t.Fatalf("clientOptions() error = %v", err)
+	}
+	if len(opts) == 0 {
+		t.Fatal("clientOptions() returned no options for emulator config")
+	}
+	if got := os.Getenv("SPANNER_EMULATOR_HOST"); got != existingHost {
+		t.Fatalf("SPANNER_EMULATOR_HOST = %q, want unchanged %q", got, existingHost)
+	}
+}
+
+func TestClientOptions_EmulatorRejectsCredentialsFile(t *testing.T) {
+	_, err := clientOptions(Config{
+		EmulatorHost:    "localhost:9010",
+		CredentialsFile: "/tmp/service-account.json",
+	})
+	if err == nil {
+		t.Fatal("clientOptions() error = nil, want emulator/credentials conflict")
+	}
+	if !strings.Contains(err.Error(), "mutually exclusive") {
+		t.Fatalf("clientOptions() error = %v, want mutually exclusive message", err)
 	}
 }

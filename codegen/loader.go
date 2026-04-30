@@ -149,24 +149,19 @@ func (s *InformationSchemaSource) loadType(ctx context.Context, tableName string
 		Params: map[string]any{"table": tableName},
 	})
 
-	pkCols := make(map[string]bool)
+	var pkColumnNames []string
 	if err := pkIter.Do(func(row *spanner.Row) error {
 		var name string
 		if err := row.Columns(&name); err != nil {
 			return err
 		}
-		pkCols[name] = true
+		pkColumnNames = append(pkColumnNames, name)
 		return nil
 	}); err != nil {
 		return nil, fmt.Errorf("querying primary key: %w", err)
 	}
 
-	for i := range t.Fields {
-		if pkCols[t.Fields[i].ColumnName] {
-			t.Fields[i].IsPrimaryKey = true
-			t.PrimaryKeyFields = append(t.PrimaryKeyFields, t.Fields[i])
-		}
-	}
+	applyPrimaryKeyOrder(t, pkColumnNames)
 
 	// Query indexes.
 	idxIter := s.client.Single().Query(ctx, spanner.Statement{
@@ -196,6 +191,29 @@ func (s *InformationSchemaSource) loadType(ctx context.Context, tableName string
 	refreshTypeMetadata(t)
 
 	return t, nil
+}
+
+func applyPrimaryKeyOrder(t *Type, pkColumnNames []string) {
+	t.PrimaryKeyFields = t.PrimaryKeyFields[:0]
+
+	fieldsByColumn := make(map[string]int, len(t.Fields))
+	for i := range t.Fields {
+		t.Fields[i].IsPrimaryKey = false
+		fieldsByColumn[t.Fields[i].ColumnName] = i
+	}
+
+	if len(pkColumnNames) == 0 {
+		return
+	}
+
+	for _, columnName := range pkColumnNames {
+		fieldIndex, ok := fieldsByColumn[columnName]
+		if !ok {
+			continue
+		}
+		t.Fields[fieldIndex].IsPrimaryKey = true
+		t.PrimaryKeyFields = append(t.PrimaryKeyFields, t.Fields[fieldIndex])
+	}
 }
 
 func (s *InformationSchemaSource) loadCommitTimestampColumns(ctx context.Context, tableName string) (map[string]bool, error) {

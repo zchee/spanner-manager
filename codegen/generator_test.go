@@ -24,6 +24,7 @@ import (
 	"testing"
 
 	gocmp "github.com/google/go-cmp/cmp"
+	goimports "golang.org/x/tools/imports"
 )
 
 func TestGenerator_Generate_BasicFiles(t *testing.T) {
@@ -900,6 +901,65 @@ func Find{{ .Type.Name }}ByPrimaryKey(db SpannerDB) string {
 	runGoTestDir(t, outDir)
 }
 
+func TestGenerator_Generate_FormattingErrorReturnsError(t *testing.T) {
+	root := newCompileFixtureRoot(t)
+	outDir := filepath.Join(root, "models")
+	templateDir := filepath.Join(root, "templates")
+
+	files := map[string]string{
+		"header.go.tmpl": `package {{ .PackageName }}
+`,
+		"spanner_db.go.tmpl": `func definitelyBroken( {
+`,
+		"type.go.tmpl": `type {{ .Type.Name }} struct{}
+`,
+	}
+
+	for name, content := range files {
+		writeTextFile(t, filepath.Join(templateDir, name), content)
+	}
+
+	err := NewGenerator(Options{
+		OutDir:       outDir,
+		PackageName:  "models",
+		TemplatePath: templateDir,
+	}).Generate(newSimpleSchema("Users"))
+	if err == nil {
+		t.Fatal("Generate() error = nil, want formatting error")
+	}
+	if !strings.Contains(err.Error(), "formatting spanner_db.spanner.go") {
+		t.Fatalf("Generate() error = %v, want formatting context", err)
+	}
+	if _, statErr := os.Stat(filepath.Join(outDir, "spanner_db.spanner.go")); !os.IsNotExist(statErr) {
+		t.Fatalf("generated file exists after formatter failure: stat error = %v", statErr)
+	}
+}
+
+func TestGenerator_Generate_RestoresImportsLocalPrefix(t *testing.T) {
+	const originalLocalPrefix = "example.com/original"
+
+	root := newCompileFixtureRoot(t)
+	writeTextFile(t, filepath.Join(root, "go.mod"), "module example.com/generated\n\ngo 1.26\n")
+	outDir := filepath.Join(root, "models")
+
+	previousLocalPrefix := goimports.LocalPrefix
+	goimports.LocalPrefix = originalLocalPrefix
+	t.Cleanup(func() {
+		goimports.LocalPrefix = previousLocalPrefix
+	})
+
+	if err := NewGenerator(Options{
+		OutDir:      outDir,
+		PackageName: "models",
+	}).Generate(newSimpleSchema("Users")); err != nil {
+		t.Fatalf("Generate() error = %v", err)
+	}
+
+	if got := goimports.LocalPrefix; got != originalLocalPrefix {
+		t.Fatalf("imports.LocalPrefix = %q, want restored %q", got, originalLocalPrefix)
+	}
+}
+
 func TestDetectGoModuleConfig(t *testing.T) {
 	tests := map[string]struct {
 		setup          func(t *testing.T) string
@@ -1051,37 +1111,22 @@ func filterFiles(items []string, keep func(string) bool) []string {
 func newCompileFixtureRoot(t *testing.T) string {
 	t.Helper()
 
-	if err := os.MkdirAll("testdata", 0o755); err != nil {
-		t.Fatalf("creating testdata directory: %v", err)
-	}
-	root, err := os.MkdirTemp("testdata", "generated-")
-	if err != nil {
-		t.Fatalf("creating compile fixture root: %v", err)
-	}
-	root, err = filepath.Abs(root)
+	root, err := filepath.Abs(t.TempDir())
 	if err != nil {
 		t.Fatalf("resolving compile fixture root: %v", err)
 	}
-	t.Cleanup(func() {
-		_ = os.RemoveAll(root)
-	})
 	return root
 }
 
 func moduleImportPath(t *testing.T, absPath string) string {
 	t.Helper()
 
-	wd, err := os.Getwd()
+	moduleRoot := filepath.Dir(absPath)
+	rel, err := filepath.Rel(moduleRoot, absPath)
 	if err != nil {
-		t.Fatalf("getting working directory: %v", err)
+		t.Fatalf("computing fixture module path for %s: %v", absPath, err)
 	}
-	repoRoot := filepath.Dir(wd)
-
-	rel, err := filepath.Rel(repoRoot, absPath)
-	if err != nil {
-		t.Fatalf("computing relative path for %s: %v", absPath, err)
-	}
-	return path.Join("github.com/zchee/spanner-manager", filepath.ToSlash(rel))
+	return path.Join("generated.test", filepath.ToSlash(rel))
 }
 
 func runGoTestDir(t *testing.T, dir string) {
@@ -1106,9 +1151,10 @@ func writeFixtureGoMod(t *testing.T, dir string) {
 		t.Fatalf("getting working directory: %v", err)
 	}
 	repoRoot := filepath.Dir(wd)
+	moduleRoot := filepath.Dir(dir)
 
 	content := "module generated.test\n\ngo 1.26\n\nrequire github.com/zchee/spanner-manager v0.0.0\n\nreplace github.com/zchee/spanner-manager => " + repoRoot + "\n"
-	path := filepath.Join(dir, "go.mod")
+	path := filepath.Join(moduleRoot, "go.mod")
 	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
 		t.Fatalf("writing fixture go.mod %s: %v", path, err)
 	}

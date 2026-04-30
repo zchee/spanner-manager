@@ -22,6 +22,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"text/template"
 
 	"golang.org/x/tools/imports"
@@ -38,6 +39,8 @@ const (
 var embeddedTemplateFS embed.FS
 
 var defaultTemplateFS = mustSubFS(embeddedTemplateFS, "languages/go/templates")
+
+var importsProcessMu sync.Mutex
 
 // Options configures the code generator.
 type Options struct {
@@ -335,7 +338,10 @@ func (g *Generator) writeTemplate(filename, templateName string, data any) error
 
 	// Format Go code.
 	if g.opts.Language == "go" {
-		formatted := g.formatGoSource(filename, buf.Bytes())
+		formatted, err := g.formatGoSource(filename, buf.Bytes())
+		if err != nil {
+			return fmt.Errorf("formatting %s: %w", filename, err)
+		}
 		buf.Reset()
 		buf.Write(formatted)
 	}
@@ -550,7 +556,7 @@ func consumeImportDecl(src []byte, start int) int {
 	return len(src)
 }
 
-func importParenDelta(line []byte, inBlockComment bool) (delta int, hasParen bool, nextInBlockComment bool) {
+func importParenDelta(line []byte, inBlockComment bool) (delta int, hasParen, nextInBlockComment bool) {
 	nextInBlockComment = inBlockComment
 	for i := 0; i < len(line); i++ {
 		if nextInBlockComment {
@@ -611,13 +617,20 @@ func joinGeneratedSections(parts ...[]byte) []byte {
 	return bytes.Join(trimmed, []byte("\n\n"))
 }
 
-func (g *Generator) formatGoSource(filename string, src []byte) []byte {
+func (g *Generator) formatGoSource(filename string, src []byte) ([]byte, error) {
 	modulePath, langVersion := detectGoModuleConfig(g.opts.OutDir)
-	imports.LocalPrefix = modulePath
 	generatedFile := filepath.Join(g.opts.OutDir, filename)
 	if absPath, err := filepath.Abs(generatedFile); err == nil {
 		generatedFile = absPath
 	}
+
+	importsProcessMu.Lock()
+	previousLocalPrefix := imports.LocalPrefix
+	imports.LocalPrefix = modulePath
+	defer func() {
+		imports.LocalPrefix = previousLocalPrefix
+		importsProcessMu.Unlock()
+	}()
 	formatted, err := imports.Process(generatedFile, src, &imports.Options{
 		TabWidth:  8,
 		TabIndent: true,
@@ -625,8 +638,7 @@ func (g *Generator) formatGoSource(filename string, src []byte) []byte {
 		Fragment:  true,
 	})
 	if err != nil {
-		// Write unformatted on format error for debugging.
-		return src
+		return nil, fmt.Errorf("goimports: %w", err)
 	}
 
 	formatted, err = gofumpt.Source(formatted, gofumpt.Options{
@@ -635,11 +647,10 @@ func (g *Generator) formatGoSource(filename string, src []byte) []byte {
 		ExtraRules:  true,
 	})
 	if err != nil {
-		// Write unformatted on format error for debugging.
-		return src
+		return nil, fmt.Errorf("gofumpt: %w", err)
 	}
 
-	return formatted
+	return formatted, nil
 }
 
 func detectGoModuleConfig(startDir string) (modulePath, langVersion string) {
