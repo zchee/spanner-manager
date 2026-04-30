@@ -1,0 +1,93 @@
+{
+  "cli_version": "dev",
+  "checkpoint_id": "c1af51bcfa85",
+  "session_id": "019ddfcf-524d-7d53-b277-c54b02da7d1d",
+  "strategy": "manual-commit",
+  "created_at": "2026-04-30T19:30:33.790666Z",
+  "branch": "refactor",
+  "checkpoints_count": 1,
+  "files_touched": [
+    "cmd/db.go",
+    "cmd/db_test.go",
+    "cmd/instance.go",
+    "go.mod",
+    "go.sum"
+  ],
+  "agent": "Codex",
+  "model": "gpt-5.5",
+  "turn_id": "58b81451df27",
+  "token_usage": {
+    "input_tokens": 257099,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 8263168,
+    "output_tokens": 34903,
+    "api_call_count": 83
+  },
+  "session_metrics": {
+    "turn_count": 1
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-04-30T19:30:33.773994Z",
+    "agent_lines": 0,
+    "agent_removed": 0,
+    "human_added": 0,
+    "human_modified": 11,
+    "human_removed": 6,
+    "total_committed": 10,
+    "total_lines_changed": 17,
+    "agent_percentage": 0,
+    "metric_version": 2
+  },
+  "prompt_attributions": [
+    {
+      "checkpoint_number": 1,
+      "user_lines_added": 980,
+      "user_lines_removed": 13,
+      "agent_lines_added": 0,
+      "agent_lines_removed": 0,
+      "user_added_per_file": {
+        ".agent/PLANS.md": 243,
+        ".agents/plans/improve-codegen.md": 204,
+        ".envrc": 1,
+        ".omc/project-memory.json": 184,
+        ".omc/sessions/37eaa247-a76a-49bf-9ead-416b244fa606.json": 8,
+        ".omc/sessions/616b68d0-9d15-479c-a540-9e6fcb4193a2.json": 8,
+        ".omc/sessions/88b550f6-9671-4b51-b9cb-7aa11ae89b04.json": 8,
+        ".omc/sessions/a567c6d0-b3d0-46a4-88ec-7ba8cc07cfe4.json": 8,
+        ".omc/state/sessions/a567c6d0-b3d0-46a4-88ec-7ba8cc07cfe4/hud-state.json": 6,
+        "cmd/db.go": 51,
+        "cmd/db_test.go": 57,
+        "cmd/instance.go": 32,
+        "cmd/instance_test.go": 68,
+        "cmd/progress.go": 27,
+        "cmd/progress_test.go": 75
+      },
+      "user_removed_per_file": {
+        "cmd/db_test.go": 5,
+        "cmd/instance.go": 8
+      }
+    },
+    {
+      "checkpoint_number": 2,
+      "user_lines_added": 671,
+      "user_lines_removed": 2,
+      "agent_lines_added": 336,
+      "agent_lines_removed": 13,
+      "user_added_per_file": {
+        ".agent/PLANS.md": 243,
+        ".agents/plans/improve-codegen.md": 204,
+        ".envrc": 1,
+        ".omc/project-memory.json": 184,
+        ".omc/sessions/37eaa247-a76a-49bf-9ead-416b244fa606.json": 8,
+        ".omc/sessions/616b68d0-9d15-479c-a540-9e6fcb4193a2.json": 8,
+        ".omc/sessions/88b550f6-9671-4b51-b9cb-7aa11ae89b04.json": 8,
+        ".omc/sessions/a567c6d0-b3d0-46a4-88ec-7ba8cc07cfe4.json": 8,
+        ".omc/state/sessions/a567c6d0-b3d0-46a4-88ec-7ba8cc07cfe4/hud-state.json": 6,
+        "go.mod": 1
+      },
+      "user_removed_per_file": {
+        "go.mod": 2
+      }
+    }
+  ]
+}

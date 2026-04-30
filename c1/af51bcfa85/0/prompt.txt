@@ -1,0 +1,5 @@
+$oh-my-codex:autopilot "Implements output progress state to `db` and `instance` subcommands"
+
+---
+
+use third-party package to write progress
