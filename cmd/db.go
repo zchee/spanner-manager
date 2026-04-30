@@ -21,6 +21,7 @@ import (
 
 	"cloud.google.com/go/spanner"
 	"github.com/spf13/cobra"
+	"google.golang.org/grpc/codes"
 
 	"github.com/zchee/spanner-manager/spannerutil"
 	"github.com/zchee/spanner-manager/sqlutil"
@@ -51,9 +52,14 @@ func newDBCreateCmd(flags *globalFlags) *cobra.Command {
 		Use:   "create",
 		Short: "Create a new database",
 		Long:  "Create a new Cloud Spanner database, optionally initialized with a schema DDL file.",
-		RunE: func(cmd *cobra.Command, args []string) error {
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) (err error) {
 			ctx := cmd.Context()
 			cfg := flags.spannerConfig()
+
+			if err := requireDatabaseConfig(cfg); err != nil {
+				return err
+			}
 
 			var statements []string
 			if schemaFile != "" {
@@ -72,13 +78,19 @@ func newDBCreateCmd(flags *globalFlags) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			defer client.Close()
+			defer func() {
+				if cerr := client.Close(); cerr != nil && err == nil {
+					err = cerr
+				}
+			}()
 
 			if err := client.CreateDatabase(ctx, statements); err != nil {
 				return err
 			}
 
-			fmt.Fprintf(cmd.OutOrStdout(), "Created database: %s\n", cfg.DatabasePath())
+			if _, err := fmt.Fprintf(cmd.OutOrStdout(), "Created database: %s\n", cfg.DatabasePath()); err != nil {
+				return err
+			}
 			return nil
 		},
 	}
@@ -89,49 +101,87 @@ func newDBCreateCmd(flags *globalFlags) *cobra.Command {
 }
 
 func newDBDropCmd(flags *globalFlags) *cobra.Command {
-	return &cobra.Command{
+	var force bool
+
+	cmd := &cobra.Command{
 		Use:   "drop",
 		Short: "Drop a database",
-		Long:  "Drop a Cloud Spanner database. This is irreversible.",
-		RunE: func(cmd *cobra.Command, args []string) error {
+		Long:  "Drop a Cloud Spanner database. This is irreversible and requires --force.",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) (err error) {
 			ctx := cmd.Context()
 			cfg := flags.spannerConfig()
+
+			if err := requireDatabaseConfig(cfg); err != nil {
+				return err
+			}
+
+			if err := requireDestructiveConfirmation("drop database", cfg, force); err != nil {
+				return err
+			}
 
 			client, err := spannerutil.NewAdminClient(ctx, cfg)
 			if err != nil {
 				return err
 			}
-			defer client.Close()
+			defer func() {
+				if cerr := client.Close(); cerr != nil && err == nil {
+					err = cerr
+				}
+			}()
 
 			if err := client.DropDatabase(ctx); err != nil {
 				return err
 			}
 
-			fmt.Fprintf(cmd.OutOrStdout(), "Dropped database: %s\n", cfg.DatabasePath())
+			if _, err := fmt.Fprintf(cmd.OutOrStdout(), "Dropped database: %s\n", cfg.DatabasePath()); err != nil {
+				return err
+			}
 			return nil
 		},
 	}
+
+	cmd.Flags().BoolVar(&force, "force", false, "confirm irreversible database drop")
+
+	return cmd
 }
 
 func newDBResetCmd(flags *globalFlags) *cobra.Command {
 	var schemaFile string
 
+	var force bool
+
 	cmd := &cobra.Command{
 		Use:   "reset",
 		Short: "Drop and recreate a database",
-		Long:  "Drop the existing database and recreate it, optionally with a schema DDL file.",
-		RunE: func(cmd *cobra.Command, args []string) error {
+		Long:  "Drop the existing database and recreate it, optionally with a schema DDL file. This is destructive and requires --force.",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) (err error) {
 			ctx := cmd.Context()
 			cfg := flags.spannerConfig()
+
+			if err := requireDatabaseConfig(cfg); err != nil {
+				return err
+			}
+
+			if err := requireDestructiveConfirmation("reset database", cfg, force); err != nil {
+				return err
+			}
 
 			client, err := spannerutil.NewAdminClient(ctx, cfg)
 			if err != nil {
 				return err
 			}
-			defer client.Close()
+			defer func() {
+				if cerr := client.Close(); cerr != nil && err == nil {
+					err = cerr
+				}
+			}()
 
 			// Drop (ignore error if database doesn't exist).
-			_ = client.DropDatabase(ctx)
+			if err := client.DropDatabase(ctx); err != nil && spanner.ErrCode(err) != codes.NotFound {
+				return err
+			}
 
 			var statements []string
 			if schemaFile != "" {
@@ -150,30 +200,48 @@ func newDBResetCmd(flags *globalFlags) *cobra.Command {
 				return err
 			}
 
-			fmt.Fprintf(cmd.OutOrStdout(), "Reset database: %s\n", cfg.DatabasePath())
+			if _, err := fmt.Fprintf(cmd.OutOrStdout(), "Reset database: %s\n", cfg.DatabasePath()); err != nil {
+				return err
+			}
 			return nil
 		},
 	}
 
 	cmd.Flags().StringVar(&schemaFile, "schema", "", "path to DDL schema file")
+	cmd.Flags().BoolVar(&force, "force", false, "confirm destructive database reset")
 
 	return cmd
 }
 
 func newDBTruncateCmd(flags *globalFlags) *cobra.Command {
-	return &cobra.Command{
+	var force bool
+
+	cmd := &cobra.Command{
 		Use:   "truncate",
 		Short: "Truncate all tables",
-		Long:  "Truncate all tables in the database, preserving the SchemaMigrations table. Respects interleave order (child tables first).",
-		RunE: func(cmd *cobra.Command, args []string) error {
+		Long:  "Truncate all tables in the database, preserving the SchemaMigrations table. Respects interleave order (child tables first). This is destructive and requires --force.",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) (err error) {
 			ctx := cmd.Context()
 			cfg := flags.spannerConfig()
+
+			if err := requireDatabaseConfig(cfg); err != nil {
+				return err
+			}
+
+			if err := requireDestructiveConfirmation("truncate database", cfg, force); err != nil {
+				return err
+			}
 
 			client, err := spannerutil.NewClient(ctx, cfg)
 			if err != nil {
 				return err
 			}
-			defer client.Close()
+			defer func() {
+				if cerr := client.Close(); cerr != nil && err == nil {
+					err = cerr
+				}
+			}()
 
 			// Query table names and their parent relationships from INFORMATION_SCHEMA.
 			iter := client.Single().Query(ctx, spanner.Statement{
@@ -205,10 +273,16 @@ func newDBTruncateCmd(flags *globalFlags) *cobra.Command {
 				}
 			}
 
-			fmt.Fprintf(cmd.OutOrStdout(), "Truncated %d tables in %s\n", len(ordered), cfg.DatabasePath())
+			if _, err := fmt.Fprintf(cmd.OutOrStdout(), "Truncated %d tables in %s\n", len(ordered), cfg.DatabasePath()); err != nil {
+				return err
+			}
 			return nil
 		},
 	}
+
+	cmd.Flags().BoolVar(&force, "force", false, "confirm destructive database truncate")
+
+	return cmd
 }
 
 func newDBLoadCmd(flags *globalFlags) *cobra.Command {
@@ -218,15 +292,24 @@ func newDBLoadCmd(flags *globalFlags) *cobra.Command {
 		Use:   "load",
 		Short: "Export DDL from database",
 		Long:  "Export the DDL schema from a Cloud Spanner database to stdout or a file.",
-		RunE: func(cmd *cobra.Command, args []string) error {
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) (err error) {
 			ctx := cmd.Context()
 			cfg := flags.spannerConfig()
+
+			if err := requireDatabaseConfig(cfg); err != nil {
+				return err
+			}
 
 			client, err := spannerutil.NewAdminClient(ctx, cfg)
 			if err != nil {
 				return err
 			}
-			defer client.Close()
+			defer func() {
+				if cerr := client.Close(); cerr != nil && err == nil {
+					err = cerr
+				}
+			}()
 
 			ddl, err := client.GetDatabaseDDL(ctx)
 			if err != nil {
@@ -242,9 +325,13 @@ func newDBLoadCmd(flags *globalFlags) *cobra.Command {
 				if err := os.WriteFile(outputFile, []byte(output.String()), 0o644); err != nil {
 					return fmt.Errorf("writing output file: %w", err)
 				}
-				fmt.Fprintf(cmd.OutOrStdout(), "Exported DDL to %s\n", outputFile)
+				if _, err := fmt.Fprintf(cmd.OutOrStdout(), "Exported DDL to %s\n", outputFile); err != nil {
+					return err
+				}
 			} else {
-				fmt.Fprint(cmd.OutOrStdout(), output.String())
+				if _, err := fmt.Fprint(cmd.OutOrStdout(), output.String()); err != nil {
+					return err
+				}
 			}
 
 			return nil
@@ -254,6 +341,26 @@ func newDBLoadCmd(flags *globalFlags) *cobra.Command {
 	cmd.Flags().StringVar(&outputFile, "output", "", "output file path (default: stdout)")
 
 	return cmd
+}
+
+func requireDestructiveConfirmation(operation string, cfg spannerutil.Config, force bool) error {
+	if force {
+		return nil
+	}
+
+	target := cfg.DatabasePath()
+	if cfg.Project == "" || cfg.Instance == "" || cfg.Database == "" {
+		target = "the configured database"
+	}
+
+	return fmt.Errorf("%s is destructive for %s; rerun with --force to confirm", operation, target)
+}
+
+func requireDatabaseConfig(cfg spannerutil.Config) error {
+	if err := cfg.Validate(); err != nil {
+		return fmt.Errorf("invalid config: %w", err)
+	}
+	return nil
 }
 
 // tableRelation represents a table and its parent table name (empty if root).
