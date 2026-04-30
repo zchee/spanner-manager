@@ -1,0 +1,23 @@
+{
+  "cli_version": "dev",
+  "checkpoint_id": "ca6971b01deb",
+  "strategy": "manual-commit",
+  "branch": "refactor",
+  "checkpoints_count": 1,
+  "files_touched": null,
+  "sessions": [
+    {
+      "metadata": "/ca/6971b01deb/0/metadata.json",
+      "transcript": "/ca/6971b01deb/0/full.jsonl",
+      "content_hash": "/ca/6971b01deb/0/content_hash.txt",
+      "prompt": "/ca/6971b01deb/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 703143,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 15355392,
+    "output_tokens": 59474,
+    "api_call_count": 122
+  }
+}

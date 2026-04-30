@@ -1,0 +1,1 @@
+$oh-my-codex:ask-claude "Review this code base strictly"
