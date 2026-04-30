@@ -1,0 +1,73 @@
+{
+  "cli_version": "dev",
+  "checkpoint_id": "25c4963868c5",
+  "session_id": "019ddf01-7dbb-7ab1-b5f1-438662d67971",
+  "strategy": "manual-commit",
+  "created_at": "2026-04-30T15:42:36.867591Z",
+  "branch": "refactor",
+  "checkpoints_count": 1,
+  "files_touched": [
+    "diff/database.go",
+    "diff/diff.go",
+    "diff/diff_test.go"
+  ],
+  "agent": "Codex",
+  "model": "gpt-5.5",
+  "turn_id": "50dffba0975a",
+  "token_usage": {
+    "input_tokens": 271262,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 8498688,
+    "output_tokens": 25179,
+    "api_call_count": 68
+  },
+  "session_metrics": {
+    "turn_count": 1
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-04-30T15:42:36.848418Z",
+    "agent_lines": 105,
+    "agent_removed": 121,
+    "human_added": 0,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 105,
+    "total_lines_changed": 226,
+    "agent_percentage": 100,
+    "metric_version": 2
+  },
+  "prompt_attributions": [
+    {
+      "checkpoint_number": 1,
+      "user_lines_added": 806,
+      "user_lines_removed": 0,
+      "agent_lines_added": 0,
+      "agent_lines_removed": 0,
+      "user_added_per_file": {
+        ".agent/PLANS.md": 243,
+        ".agents/plans/improve-codegen.md": 204,
+        ".envrc": 1,
+        ".omc/project-memory.json": 334,
+        ".omc/sessions/37eaa247-a76a-49bf-9ead-416b244fa606.json": 8,
+        ".omc/sessions/616b68d0-9d15-479c-a540-9e6fcb4193a2.json": 8,
+        ".omc/sessions/88b550f6-9671-4b51-b9cb-7aa11ae89b04.json": 8
+      }
+    },
+    {
+      "checkpoint_number": 2,
+      "user_lines_added": 806,
+      "user_lines_removed": 0,
+      "agent_lines_added": 105,
+      "agent_lines_removed": 121,
+      "user_added_per_file": {
+        ".agent/PLANS.md": 243,
+        ".agents/plans/improve-codegen.md": 204,
+        ".envrc": 1,
+        ".omc/project-memory.json": 334,
+        ".omc/sessions/37eaa247-a76a-49bf-9ead-416b244fa606.json": 8,
+        ".omc/sessions/616b68d0-9d15-479c-a540-9e6fcb4193a2.json": 8,
+        ".omc/sessions/88b550f6-9671-4b51-b9cb-7aa11ae89b04.json": 8
+      }
+    }
+  ]
+}

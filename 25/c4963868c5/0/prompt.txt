@@ -1,0 +1,1 @@
+$oh-my-codex:autopilot "Fix gemini reviewed points: https://github.com/zchee/spanner-manager/pull/9#pullrequestreview-4205987239"
