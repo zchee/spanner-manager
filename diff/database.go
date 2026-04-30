@@ -278,7 +278,7 @@ func ParseDatabase(ddlStrings []string) (*Database, error) {
 		case *ast.Grant:
 			db.grants = append(db.grants, parseGrant(stmt))
 		default:
-			return nil, fmt.Errorf("unsupported DDL statement in ParseDatabase: %T", stmt)
+			return nil, fmt.Errorf("unsupported DDL statement in ParseDatabase: %T (%s)", stmt, stmt.SQL())
 		}
 	}
 

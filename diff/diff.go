@@ -166,9 +166,13 @@ func (g *generator) generate() []Statement {
 		if !g.sequenceEqual(fromSequence.Raw, sequence.Raw) {
 			alter, ok := g.generateAlterSequence(fromSequence.Raw, sequence.Raw)
 			if !ok {
-				stmts = append(stmts, ddlStatement(&ast.DropSequence{Name: fromSequence.Raw.Name}))
-				stmts = append(stmts, ddlStatement(sequence.Raw))
-				continue
+				g.failf(
+					"unsupported sequence change for %s: %s to %s",
+					sequence.Raw.Name.SQL(),
+					fromSequence.Raw.SQL(),
+					sequence.Raw.SQL(),
+				)
+				return stmts
 			}
 			stmts = append(stmts, alter...)
 		}
@@ -633,8 +637,6 @@ func (g *generator) generateColumnDiffs(from, to *Table) []Statement {
 			}
 		} else if g.columnTypeWideningOnly(fromCol, toCol) {
 			stmts = append(stmts, ddlStatement(alterColumnDDL{Table: to.Raw.Name, Def: toCol}))
-		} else if g.columnCanUseLegacyRecreate(from, fromCol) {
-			stmts = append(stmts, g.generateDropAndCreateColumn(from, to, fromCol, toCol)...)
 		} else {
 			g.failf(
 				"unsupported column change for %s.%s: %s to %s",
@@ -698,55 +700,6 @@ func (g *generator) generateDropColumn(table *ast.Path, column *ast.Ident) []Sta
 		Name:            table,
 		TableAlteration: &ast.DropColumn{Name: column},
 	}))
-	return stmts
-}
-
-func (g *generator) generateDropAndCreateColumn(from, to *Table, fromCol, toCol *ast.ColumnDef) []Statement {
-	var stmts []Statement
-
-	for _, index := range g.findIndexesByColumn(from.Indexes, comparableIdent(fromCol.Name)) {
-		if g.isDroppedIndex(index.Key) {
-			continue
-		}
-		stmts = append(stmts, ddlStatement(&ast.DropIndex{Name: index.Raw.Name}))
-		g.droppedIndexByKey[index.Key] = struct{}{}
-	}
-	for _, index := range g.findSearchIndexesByColumn(from.SearchIndexes, comparableIdent(fromCol.Name)) {
-		if g.isDroppedIndex(index.Key) {
-			continue
-		}
-		stmts = append(stmts, ddlStatement(&ast.DropSearchIndex{Name: index.Raw.Name}))
-		g.droppedIndexByKey[index.Key] = struct{}{}
-	}
-
-	stmts = append(stmts, g.generateDropColumn(from.Raw.Name, fromCol.Name)...)
-
-	if toCol.NotNull && toCol.DefaultSemantics == nil {
-		stmts = append(stmts, ddlStatement(&ast.AlterTable{
-			Name:            to.Raw.Name,
-			TableAlteration: &ast.AddColumn{Column: g.setDefaultSemantics(toCol)},
-		}))
-		stmts = append(stmts, ddlStatement(&ast.AlterTable{
-			Name: to.Raw.Name,
-			TableAlteration: &ast.AlterColumn{
-				Name:       toCol.Name,
-				Alteration: &ast.AlterColumnDropDefault{},
-			},
-		}))
-	} else {
-		stmts = append(stmts, ddlStatement(&ast.AlterTable{
-			Name:            to.Raw.Name,
-			TableAlteration: &ast.AddColumn{Column: toCol},
-		}))
-	}
-
-	for _, index := range g.findIndexesByColumn(from.Indexes, comparableIdent(fromCol.Name)) {
-		stmts = append(stmts, ddlStatement(index.Raw))
-	}
-	for _, index := range g.findSearchIndexesByColumn(from.SearchIndexes, comparableIdent(fromCol.Name)) {
-		stmts = append(stmts, ddlStatement(index.Raw))
-	}
-
 	return stmts
 }
 
@@ -1073,22 +1026,6 @@ func (g *generator) columnTypeWideningOnly(x, y *ast.ColumnDef) bool {
 		return false
 	}
 	return isSafeSizedTypeWidening(x.Type, y.Type)
-}
-
-func (g *generator) columnCanUseLegacyRecreate(table *Table, col *ast.ColumnDef) bool {
-	columnKey := comparableIdent(col.Name)
-	if len(g.findIndexesByColumn(table.Indexes, columnKey)) > 0 {
-		return true
-	}
-	if len(g.findSearchIndexesByColumn(table.SearchIndexes, columnKey)) > 0 {
-		return true
-	}
-	for _, index := range table.VectorIndexes {
-		if comparableIdentName(index.ColumnName) == columnKey {
-			return true
-		}
-	}
-	return false
 }
 
 func isSafeSizedTypeWidening(from, to ast.SchemaType) bool {
@@ -1671,17 +1608,29 @@ func normalizeSQL(sql string) string {
 	var quote rune
 	spacePending := false
 
-	for _, r := range strings.TrimSpace(sql) {
+	runes := []rune(strings.TrimSpace(sql))
+	for i := 0; i < len(runes); i++ {
+		r := runes[i]
 		if inString {
 			b.WriteRune(r)
+			if r == '\\' && i+1 < len(runes) {
+				i++
+				b.WriteRune(runes[i])
+				continue
+			}
 			if r == quote {
+				if i+1 < len(runes) && runes[i+1] == quote && quote != rune(0x60) {
+					i++
+					b.WriteRune(runes[i])
+					continue
+				}
 				inString = false
 			}
 			continue
 		}
 
 		switch r {
-		case '\'', '"':
+		case '\'', '"', rune(0x60):
 			if spacePending && b.Len() > 0 {
 				b.WriteByte(' ')
 				spacePending = false

@@ -1192,25 +1192,6 @@ CREATE SEQUENCE Seq OPTIONS (sequence_kind = 'bit_reversed_positive');
 			},
 		},
 		{
-			name: "replace sequence by drop create",
-			from: `
-CREATE SEQUENCE Seq OPTIONS (sequence_kind = 'bit_reversed_positive');
-`,
-			to: `
-CREATE SEQUENCE Seq OPTIONS (sequence_kind = 'skip_range_min_max');
-`,
-			want: []Statement{
-				{
-					Kind: sqlutil.KindDDL,
-					SQL:  `DROP SEQUENCE Seq`,
-				},
-				{
-					Kind: sqlutil.KindDDL,
-					SQL:  `CREATE SEQUENCE Seq OPTIONS (sequence_kind = "skip_range_min_max")`,
-				},
-			},
-		},
-		{
 			name: "create vector index",
 			from: `
 CREATE TABLE Documents (
@@ -1354,6 +1335,30 @@ func TestDiff_ApprovedPlanRegressions(t *testing.T) {
 			},
 		},
 		{
+			name:    "unsupported indexed column change fails instead of drop recreate",
+			from:    `CREATE TABLE Users (UserId INT64 NOT NULL, ExternalId INT64) PRIMARY KEY(UserId); CREATE INDEX UsersByExternalId ON Users(ExternalId);`,
+			to:      `CREATE TABLE Users (UserId INT64 NOT NULL, ExternalId STRING(36)) PRIMARY KEY(UserId); CREATE INDEX UsersByExternalId ON Users(ExternalId);`,
+			wantErr: true,
+			forbidSQLContains: []string{
+				`DROP INDEX UsersByExternalId`,
+				`DROP COLUMN ExternalId`,
+			},
+		},
+		{
+			name: "unsupported sequence kind change fails instead of drop create",
+			from: `
+CREATE SEQUENCE Seq OPTIONS (sequence_kind = 'bit_reversed_positive');
+`,
+			to: `
+CREATE SEQUENCE Seq OPTIONS (sequence_kind = 'skip_range_min_max');
+`,
+			wantErr: true,
+			forbidSQLContains: []string{
+				`DROP SEQUENCE Seq`,
+				`CREATE SEQUENCE Seq`,
+			},
+		},
+		{
 			name: "sequence option changes are altered in place",
 			from: `
 CREATE SEQUENCE UserSeq OPTIONS (
@@ -1487,12 +1492,14 @@ CREATE VIEW LiteralView SQL SECURITY INVOKER AS SELECT "active user" AS label FR
 
 func TestParseDatabase_UnsupportedModernDDLReturnsError(t *testing.T) {
 	tests := []struct {
-		name string
-		ddl  string
+		name            string
+		ddl             string
+		wantSQLFragment string
 	}{
 		{
-			name: "locality group",
-			ddl:  `CREATE LOCALITY GROUP hot OPTIONS (storage = 'ssd');`,
+			name:            "locality group",
+			ddl:             `CREATE LOCALITY GROUP hot OPTIONS (storage = 'ssd');`,
+			wantSQLFragment: `CREATE LOCALITY GROUP hot`,
 		},
 		{
 			name: "property graph",
@@ -1500,6 +1507,7 @@ func TestParseDatabase_UnsupportedModernDDLReturnsError(t *testing.T) {
 CREATE TABLE Users (UserId INT64 NOT NULL) PRIMARY KEY(UserId);
 CREATE PROPERTY GRAPH UserGraph NODE TABLES (Users);
 `,
+			wantSQLFragment: `CREATE PROPERTY GRAPH UserGraph`,
 		},
 	}
 
@@ -1509,8 +1517,12 @@ CREATE PROPERTY GRAPH UserGraph NODE TABLES (Users);
 			if err != nil {
 				t.Fatalf("SplitStatements() error = %v", err)
 			}
-			if _, err := ParseDatabase(stmts); err == nil {
+			_, err = ParseDatabase(stmts)
+			if err == nil {
 				t.Fatalf("ParseDatabase() error = nil, want unsupported DDL error")
+			}
+			if !strings.Contains(err.Error(), tt.wantSQLFragment) {
+				t.Fatalf("ParseDatabase() error = %q, want SQL fragment %q", err, tt.wantSQLFragment)
 			}
 		})
 	}
@@ -1518,10 +1530,12 @@ CREATE PROPERTY GRAPH UserGraph NODE TABLES (Users);
 
 func TestDiff_CoverageBranches(t *testing.T) {
 	tests := []struct {
-		name string
-		from string
-		to   string
-		want []Statement
+		name              string
+		from              string
+		to                string
+		want              []Statement
+		wantErr           bool
+		forbidSQLContains []string
 	}{
 		{
 			name: "timestamp set not null allow commit true",
@@ -1576,26 +1590,23 @@ func TestDiff_CoverageBranches(t *testing.T) {
 			},
 		},
 		{
-			name: "drop recreate column with regular index",
-			from: `CREATE TABLE t1 (id INT64 NOT NULL, c STRING(36)) PRIMARY KEY(id); CREATE INDEX idx_t1_c ON t1(c);`,
-			to:   `CREATE TABLE t1 (id INT64 NOT NULL, c INT64 NOT NULL) PRIMARY KEY(id); CREATE INDEX idx_t1_c ON t1(c);`,
-			want: []Statement{
-				{Kind: sqlutil.KindDDL, SQL: `DROP INDEX idx_t1_c`},
-				{Kind: sqlutil.KindDDL, SQL: `ALTER TABLE t1 DROP COLUMN c`},
-				{Kind: sqlutil.KindDDL, SQL: `ALTER TABLE t1 ADD COLUMN c INT64 NOT NULL DEFAULT (0)`},
-				{Kind: sqlutil.KindDDL, SQL: `ALTER TABLE t1 ALTER COLUMN c DROP DEFAULT`},
-				{Kind: sqlutil.KindDDL, SQL: `CREATE INDEX idx_t1_c ON t1(c)`},
+			name:    "regular-indexed column type change fails instead of drop recreate",
+			from:    `CREATE TABLE t1 (id INT64 NOT NULL, c STRING(36)) PRIMARY KEY(id); CREATE INDEX idx_t1_c ON t1(c);`,
+			to:      `CREATE TABLE t1 (id INT64 NOT NULL, c INT64 NOT NULL) PRIMARY KEY(id); CREATE INDEX idx_t1_c ON t1(c);`,
+			wantErr: true,
+			forbidSQLContains: []string{
+				`DROP INDEX idx_t1_c`,
+				`ALTER TABLE t1 DROP COLUMN c`,
 			},
 		},
 		{
-			name: "drop recreate generated token column with search index",
-			from: `CREATE TABLE t1 (id INT64 NOT NULL, body STRING(MAX), tok TOKENLIST AS (TOKENIZE_FULLTEXT(body)) HIDDEN) PRIMARY KEY(id); CREATE SEARCH INDEX sidx_t1_tok ON t1(tok);`,
-			to:   `CREATE TABLE t1 (id INT64 NOT NULL, body STRING(MAX), tok TOKENLIST AS (TOKENIZE_SUBSTRING(body)) HIDDEN) PRIMARY KEY(id); CREATE SEARCH INDEX sidx_t1_tok ON t1(tok);`,
-			want: []Statement{
-				{Kind: sqlutil.KindDDL, SQL: `DROP SEARCH INDEX sidx_t1_tok`},
-				{Kind: sqlutil.KindDDL, SQL: `ALTER TABLE t1 DROP COLUMN tok`},
-				{Kind: sqlutil.KindDDL, SQL: `ALTER TABLE t1 ADD COLUMN tok TOKENLIST AS (TOKENIZE_SUBSTRING(body)) HIDDEN`},
-				{Kind: sqlutil.KindDDL, SQL: `CREATE SEARCH INDEX sidx_t1_tok ON t1(tok)`},
+			name:    "search-indexed generated column change fails instead of drop recreate",
+			from:    `CREATE TABLE t1 (id INT64 NOT NULL, body STRING(MAX), tok TOKENLIST AS (TOKENIZE_FULLTEXT(body)) HIDDEN) PRIMARY KEY(id); CREATE SEARCH INDEX sidx_t1_tok ON t1(tok);`,
+			to:      `CREATE TABLE t1 (id INT64 NOT NULL, body STRING(MAX), tok TOKENLIST AS (TOKENIZE_SUBSTRING(body)) HIDDEN) PRIMARY KEY(id); CREATE SEARCH INDEX sidx_t1_tok ON t1(tok);`,
+			wantErr: true,
+			forbidSQLContains: []string{
+				`DROP SEARCH INDEX sidx_t1_tok`,
+				`ALTER TABLE t1 DROP COLUMN tok`,
 			},
 		},
 		{
@@ -1667,10 +1678,25 @@ func TestDiff_CoverageBranches(t *testing.T) {
 			to := mustParseDatabaseFromString(t, tt.to)
 
 			got, err := Diff(from, to)
-			if err != nil {
+			if tt.wantErr {
+				if err == nil {
+					t.Fatalf("Diff() error = nil, want error; statements = %#v", got)
+				}
+			} else if err != nil {
 				t.Fatalf("Diff() error = %v", err)
 			}
 
+			for _, forbidden := range tt.forbidSQLContains {
+				for _, stmt := range got {
+					if strings.Contains(stmt.SQL, forbidden) {
+						t.Fatalf("Diff() emitted forbidden SQL %q in statement %q", forbidden, stmt.SQL)
+					}
+				}
+			}
+
+			if tt.wantErr {
+				return
+			}
 			if diff := gocmp.Diff(tt.want, got); diff != "" {
 				t.Errorf("Diff() mismatch (-want +got):\n%s", diff)
 			}
@@ -1762,8 +1788,17 @@ func TestDiff_HelperCoverage(t *testing.T) {
 			t.Fatalf("normalizeConstraintSQL() = %q", got)
 		}
 
-		if got := normalizeSQL(`DEFAULT ("a  b")`); got != `DEFAULT ("a  b")` {
-			t.Fatalf("normalizeSQL() collapsed whitespace inside string literal: %q", got)
+		normalizeTests := map[string]string{
+			"double quoted literal":  "DEFAULT (\"a  b\")",
+			"single quoted literal":  "DEFAULT ('a  b')",
+			"backtick identifier":    "SELECT " + string(rune(0x60)) + "a  b" + string(rune(0x60)) + " FROM Users",
+			"backslash quote escape": "DEFAULT ('a\\'  b')",
+			"doubled quote escape":   "DEFAULT ('a''  b')",
+		}
+		for name, input := range normalizeTests {
+			if got := normalizeSQL(input); got != input {
+				t.Fatalf("%s: normalizeSQL() = %q, want %q", name, got, input)
+			}
 		}
 
 		if got := normalizeOnDelete(""); got != "NO ACTION" {
