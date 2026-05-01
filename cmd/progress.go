@@ -37,7 +37,7 @@ func runWithProgress(cmd *cobra.Command, description string, run func() error) e
 	bar := progressbar.NewOptions(
 		-1,
 		progressbar.OptionSetWriter(cmd.ErrOrStderr()),
-		progressbar.OptionSetDescription(description),
+		progressbar.OptionSetDescription(" "+description),
 		progressbar.OptionSpinnerType(14),
 		progressbar.OptionThrottle(100*time.Millisecond),
 		progressbar.OptionClearOnFinish(),
