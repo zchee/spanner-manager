@@ -28,11 +28,14 @@ import (
 // Executor handles migration execution and version tracking.
 type Executor struct {
 	client *spannerutil.Client
+	runner migrationRunner
 }
 
 // NewExecutor creates a new migration executor.
 func NewExecutor(client *spannerutil.Client) *Executor {
-	return &Executor{client: client}
+	e := &Executor{client: client}
+	e.runner = e.defaultRunner()
+	return e
 }
 
 // EnsureTable creates the SchemaMigrations table if it does not exist.
@@ -100,7 +103,35 @@ func (e *Executor) SetVersion(ctx context.Context, version uint, dirty bool) err
 // It returns the number of migrations applied.
 // If limit is 0, all pending migrations are applied.
 func (e *Executor) ExecuteMigrations(ctx context.Context, migrations []Migration, limit int) (int, error) {
-	currentVersion, dirty, err := e.GetVersion(ctx)
+	return e.runner.execute(ctx, migrations, limit)
+}
+
+type migrationRunner struct {
+	getVersion          func(context.Context) (uint, bool, error)
+	setVersion          func(context.Context, uint, bool) error
+	updateDatabaseDDL   func(context.Context, []string) error
+	applyDML            func(context.Context, []string) error
+	applyPartitionedDML func(context.Context, string) (int64, error)
+}
+
+func (e *Executor) defaultRunner() migrationRunner {
+	return migrationRunner{
+		getVersion: e.GetVersion,
+		setVersion: e.SetVersion,
+		updateDatabaseDDL: func(ctx context.Context, statements []string) error {
+			return e.client.UpdateDatabaseDDL(ctx, statements)
+		},
+		applyDML: func(ctx context.Context, statements []string) error {
+			return e.client.ApplyDML(ctx, statements)
+		},
+		applyPartitionedDML: func(ctx context.Context, statement string) (int64, error) {
+			return e.client.ApplyPartitionedDML(ctx, statement)
+		},
+	}
+}
+
+func (r migrationRunner) execute(ctx context.Context, migrations []Migration, limit int) (int, error) {
+	currentVersion, dirty, err := r.getVersion(ctx)
 	if err != nil {
 		return 0, err
 	}
@@ -119,30 +150,32 @@ func (e *Executor) ExecuteMigrations(ctx context.Context, migrations []Migration
 		}
 
 		// Set dirty flag.
-		if err := e.SetVersion(ctx, m.Version, true); err != nil {
+		if err := r.setVersion(ctx, m.Version, true); err != nil {
 			return applied, fmt.Errorf("setting dirty flag for version %d: %w", m.Version, err)
 		}
 
 		// Execute statements.
 		switch m.Kind {
 		case sqlutil.KindDDL:
-			if err := e.client.UpdateDatabaseDDL(ctx, m.Statements); err != nil {
+			if err := r.updateDatabaseDDL(ctx, m.Statements); err != nil {
 				return applied, fmt.Errorf("executing DDL migration %d (%s): %w", m.Version, m.Name, err)
 			}
 		case sqlutil.KindDML:
-			if err := e.client.ApplyDML(ctx, m.Statements); err != nil {
+			if err := r.applyDML(ctx, m.Statements); err != nil {
 				return applied, fmt.Errorf("executing DML migration %d (%s): %w", m.Version, m.Name, err)
 			}
 		case sqlutil.KindPartitionedDML:
 			for _, stmt := range m.Statements {
-				if _, err := e.client.ApplyPartitionedDML(ctx, stmt); err != nil {
+				if _, err := r.applyPartitionedDML(ctx, stmt); err != nil {
 					return applied, fmt.Errorf("executing partitioned DML migration %d (%s): %w", m.Version, m.Name, err)
 				}
 			}
+		default:
+			return applied, fmt.Errorf("unsupported migration kind %s for version %d (%s)", m.Kind, m.Version, m.Name)
 		}
 
 		// Clear dirty flag.
-		if err := e.SetVersion(ctx, m.Version, false); err != nil {
+		if err := r.setVersion(ctx, m.Version, false); err != nil {
 			return applied, fmt.Errorf("clearing dirty flag for version %d: %w", m.Version, err)
 		}
 

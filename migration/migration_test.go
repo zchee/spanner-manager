@@ -17,6 +17,7 @@ package migration
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	gocmp "github.com/google/go-cmp/cmp"
@@ -26,9 +27,11 @@ import (
 
 func TestReadMigrations(t *testing.T) {
 	tests := map[string]struct {
-		files    map[string]string // filename → content
-		expected []Migration
-		wantErr  bool
+		files       map[string]string // filename → content
+		dirs        []string
+		expected    []Migration
+		wantErr     bool
+		errContains string
 	}{
 		"success: single DDL migration": {
 			files: map[string]string{
@@ -89,6 +92,32 @@ func TestReadMigrations(t *testing.T) {
 				},
 			},
 		},
+		"success: numeric migration without name": {
+			files: map[string]string{
+				"000001.sql": "CREATE TABLE Users (UserId INT64 NOT NULL) PRIMARY KEY (UserId)",
+			},
+			expected: []Migration{
+				{
+					Version:    1,
+					Name:       "",
+					Statements: []string{"CREATE TABLE Users (UserId INT64 NOT NULL) PRIMARY KEY (UserId)"},
+					Kind:       sqlutil.KindDDL,
+				},
+			},
+		},
+		"success: hyphenated migration name": {
+			files: map[string]string{
+				"000001_add-user-profile.sql": "CREATE TABLE UserProfiles (UserId INT64 NOT NULL) PRIMARY KEY (UserId)",
+			},
+			expected: []Migration{
+				{
+					Version:    1,
+					Name:       "add-user-profile",
+					Statements: []string{"CREATE TABLE UserProfiles (UserId INT64 NOT NULL) PRIMARY KEY (UserId)"},
+					Kind:       sqlutil.KindDDL,
+				},
+			},
+		},
 		"success: empty file is skipped": {
 			files: map[string]string{
 				"000001_empty.sql": "",
@@ -109,6 +138,34 @@ func TestReadMigrations(t *testing.T) {
 				},
 			},
 		},
+		"success: nested directories are ignored": {
+			dirs: []string{"000001_ignored.sql"},
+			files: map[string]string{
+				"000002_create_users.sql": "CREATE TABLE Users (UserId INT64 NOT NULL) PRIMARY KEY (UserId)",
+			},
+			expected: []Migration{
+				{
+					Version:    2,
+					Name:       "create_users",
+					Statements: []string{"CREATE TABLE Users (UserId INT64 NOT NULL) PRIMARY KEY (UserId)"},
+					Kind:       sqlutil.KindDDL,
+				},
+			},
+		},
+		"error: invalid SQL includes filename": {
+			files: map[string]string{
+				"000001_invalid.sql": "NOT VALID SQL AT ALL",
+			},
+			wantErr:     true,
+			errContains: "000001_invalid.sql",
+		},
+		"error: mixed statement kinds include both kinds": {
+			files: map[string]string{
+				"000001_mixed.sql": "CREATE TABLE Users (UserId INT64 NOT NULL) PRIMARY KEY (UserId);\nINSERT INTO Users (UserId) VALUES (1)",
+			},
+			wantErr:     true,
+			errContains: "mixed statement kinds in 000001_mixed.sql: statement 1 is DDL but statement 2 is DML",
+		},
 	}
 
 	for name, tt := range tests {
@@ -117,6 +174,12 @@ func TestReadMigrations(t *testing.T) {
 			migrationsDir := filepath.Join(dir, "migrations")
 			if err := os.MkdirAll(migrationsDir, 0o755); err != nil {
 				t.Fatal(err)
+			}
+
+			for _, dirname := range tt.dirs {
+				if err := os.MkdirAll(filepath.Join(migrationsDir, dirname), 0o755); err != nil {
+					t.Fatal(err)
+				}
 			}
 
 			for filename, content := range tt.files {
@@ -128,6 +191,17 @@ func TestReadMigrations(t *testing.T) {
 			got, err := ReadMigrations(dir)
 			if (err != nil) != tt.wantErr {
 				t.Fatalf("ReadMigrations() error = %v, wantErr %v", err, tt.wantErr)
+			}
+			if tt.errContains != "" {
+				if err == nil {
+					t.Fatalf("ReadMigrations() error = nil, want substring %q", tt.errContains)
+				}
+				if !strings.Contains(err.Error(), tt.errContains) {
+					t.Fatalf("ReadMigrations() error = %q, want substring %q", err, tt.errContains)
+				}
+			}
+			if tt.wantErr {
+				return
 			}
 
 			if diff := gocmp.Diff(tt.expected, got, gocmp.AllowUnexported(Migration{})); diff != "" {
