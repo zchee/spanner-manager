@@ -27,13 +27,17 @@ import (
 
 // Executor handles migration execution and version tracking.
 type Executor struct {
-	client *spannerutil.Client
-	runner migrationRunner
+	client  *spannerutil.Client
+	backend migrationBackend
+	runner  migrationRunner
 }
 
 // NewExecutor creates a new migration executor.
 func NewExecutor(client *spannerutil.Client) *Executor {
-	e := &Executor{client: client}
+	e := &Executor{
+		client:  client,
+		backend: spannerMigrationBackend{client: client},
+	}
 	e.runner = e.defaultRunner()
 	return e
 }
@@ -41,12 +45,11 @@ func NewExecutor(client *spannerutil.Client) *Executor {
 // EnsureTable creates the SchemaMigrations table if it does not exist.
 func (e *Executor) EnsureTable(ctx context.Context) error {
 	// Try to query the table; if it fails, create it.
-	iter := e.client.Single().Query(ctx, spanner.Statement{
+	if err := e.backend.query(ctx, spanner.Statement{
 		SQL: "SELECT Version FROM SchemaMigrations LIMIT 1",
-	})
-	if err := iter.Do(func(_ *spanner.Row) error { return nil }); err != nil {
+	}, func(_ *spanner.Row) error { return nil }); err != nil {
 		if spanner.ErrCode(err) == codes.NotFound || isTableNotFoundError(err) {
-			return e.client.UpdateDatabaseDDL(ctx, []string{SchemaMigrationsTableDDL})
+			return e.backend.updateDatabaseDDL(ctx, []string{SchemaMigrationsTableDDL})
 		}
 		return fmt.Errorf("checking SchemaMigrations table: %w", err)
 	}
@@ -55,12 +58,12 @@ func (e *Executor) EnsureTable(ctx context.Context) error {
 
 // GetVersion returns the current migration version and dirty flag.
 func (e *Executor) GetVersion(ctx context.Context) (version uint, dirty bool, err error) {
-	iter := e.client.Single().Query(ctx, spanner.Statement{
+	stmt := spanner.Statement{
 		SQL: "SELECT Version, Dirty FROM SchemaMigrations ORDER BY Version DESC LIMIT 1",
-	})
+	}
 
 	var found bool
-	if err := iter.Do(func(row *spanner.Row) error {
+	if err := e.backend.query(ctx, stmt, func(row *spanner.Row) error {
 		var v int64
 		var d bool
 		if err := row.Columns(&v, &d); err != nil {
@@ -83,9 +86,9 @@ func (e *Executor) GetVersion(ctx context.Context) (version uint, dirty bool, er
 
 // SetVersion sets the migration version and dirty flag.
 func (e *Executor) SetVersion(ctx context.Context, version uint, dirty bool) error {
-	return e.client.ReadWriteTransaction(ctx, func(ctx context.Context, txn *spanner.ReadWriteTransaction) error {
+	return e.backend.readWriteTransaction(ctx, func(ctx context.Context, txn migrationTransaction) error {
 		// Delete all existing rows.
-		if _, err := txn.Update(ctx, spanner.Statement{SQL: "DELETE FROM SchemaMigrations WHERE true"}); err != nil {
+		if _, err := txn.update(ctx, spanner.Statement{SQL: "DELETE FROM SchemaMigrations WHERE true"}); err != nil {
 			return err
 		}
 		// Insert the new version.
@@ -95,7 +98,7 @@ func (e *Executor) SetVersion(ctx context.Context, version uint, dirty bool) err
 				[]any{int64(version), dirty},
 			),
 		}
-		return txn.BufferWrite(m)
+		return txn.bufferWrite(m)
 	})
 }
 
@@ -119,7 +122,7 @@ func (e *Executor) defaultRunner() migrationRunner {
 		getVersion: e.GetVersion,
 		setVersion: e.SetVersion,
 		updateDatabaseDDL: func(ctx context.Context, statements []string) error {
-			return e.client.UpdateDatabaseDDL(ctx, statements)
+			return e.backend.updateDatabaseDDL(ctx, statements)
 		},
 		applyDML: func(ctx context.Context, statements []string) error {
 			return e.client.ApplyDML(ctx, statements)
@@ -128,6 +131,48 @@ func (e *Executor) defaultRunner() migrationRunner {
 			return e.client.ApplyPartitionedDML(ctx, statement)
 		},
 	}
+}
+
+type migrationBackend interface {
+	query(context.Context, spanner.Statement, func(*spanner.Row) error) error
+	updateDatabaseDDL(context.Context, []string) error
+	readWriteTransaction(context.Context, func(context.Context, migrationTransaction) error) error
+}
+
+type migrationTransaction interface {
+	update(context.Context, spanner.Statement) (int64, error)
+	bufferWrite([]*spanner.Mutation) error
+}
+
+type spannerMigrationBackend struct {
+	client *spannerutil.Client
+}
+
+func (s spannerMigrationBackend) query(ctx context.Context, stmt spanner.Statement, f func(*spanner.Row) error) error {
+	it := s.client.Single().Query(ctx, stmt)
+	return it.Do(f)
+}
+
+func (s spannerMigrationBackend) updateDatabaseDDL(ctx context.Context, statements []string) error {
+	return s.client.UpdateDatabaseDDL(ctx, statements)
+}
+
+func (s spannerMigrationBackend) readWriteTransaction(ctx context.Context, f func(context.Context, migrationTransaction) error) error {
+	return s.client.ReadWriteTransaction(ctx, func(ctx context.Context, txn *spanner.ReadWriteTransaction) error {
+		return f(ctx, spannerMigrationTransaction{txn: txn})
+	})
+}
+
+type spannerMigrationTransaction struct {
+	txn *spanner.ReadWriteTransaction
+}
+
+func (t spannerMigrationTransaction) update(ctx context.Context, stmt spanner.Statement) (int64, error) {
+	return t.txn.Update(ctx, stmt)
+}
+
+func (t spannerMigrationTransaction) bufferWrite(mutations []*spanner.Mutation) error {
+	return t.txn.BufferWrite(mutations)
 }
 
 func (r migrationRunner) execute(ctx context.Context, migrations []Migration, limit int) (int, error) {
