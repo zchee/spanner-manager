@@ -363,7 +363,8 @@ func newDBLoadCmd(flags *globalFlags) *cobra.Command {
 
 			var output strings.Builder
 			for _, stmt := range ddl {
-				output.WriteString(stmt + ";\n\n")
+				output.WriteString(stmt)
+				output.WriteString(";\n\n")
 			}
 
 			if outputFile != "" {
