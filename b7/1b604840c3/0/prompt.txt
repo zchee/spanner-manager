@@ -1,5 +1,0 @@
-$oh-my-codex:autopilot $use-modern-go "improve test coverage of ./migration/executor.go"
-
----
-
-$oh-my-codex:autopilot "`iter` variable will shadowing stdlib `iter` package. Fix it to `it`"
