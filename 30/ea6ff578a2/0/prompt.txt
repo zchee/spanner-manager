@@ -1,1 +1,0 @@
-$oh-my-codex:autopilot $use-modern-go "Increase test coverage to ./migration package"
