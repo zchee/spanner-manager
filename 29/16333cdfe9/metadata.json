@@ -18,6 +18,12 @@
     {
       "metadata": "/29/16333cdfe9/1/metadata.json",
       "prompt": ""
+    },
+    {
+      "metadata": "/29/16333cdfe9/2/metadata.json",
+      "transcript": "/29/16333cdfe9/2/full.jsonl",
+      "content_hash": "/29/16333cdfe9/2/content_hash.txt",
+      "prompt": "/29/16333cdfe9/2/prompt.txt"
     }
   ],
   "token_usage": {
