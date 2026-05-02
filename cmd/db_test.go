@@ -230,6 +230,34 @@ func TestTruncateTablesSQLFiltersViews(t *testing.T) {
 	}
 }
 
+func TestQuoteIdentifier(t *testing.T) {
+	tests := map[string]struct {
+		name string
+		want string
+	}{
+		"success: ordinary table name": {
+			name: "Users",
+			want: "`Users`",
+		},
+		"success: embedded backtick is doubled": {
+			name: "a`b",
+			want: "`a``b`",
+		},
+		"success: multiple embedded backticks are doubled": {
+			name: "a`b`c",
+			want: "`a``b``c`",
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			if got := quoteIdentifier(tt.name); got != tt.want {
+				t.Fatalf("quoteIdentifier(%q) = %q, want %q", tt.name, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestDBResetDoesNotDuplicateDropProgressLine(t *testing.T) {
 	flags := &globalFlags{
 		project:  "test-project",

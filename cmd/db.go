@@ -315,7 +315,7 @@ func newDBTruncateCmd(flags *globalFlags) *cobra.Command {
 				if err := writeProgress(cmd, "Deleting rows from table: %s", name); err != nil {
 					return err
 				}
-				if _, err := client.ApplyPartitionedDML(ctx, fmt.Sprintf("DELETE FROM `%s` WHERE true", name)); err != nil {
+				if _, err := client.ApplyPartitionedDML(ctx, fmt.Sprintf("DELETE FROM %s WHERE true", quoteIdentifier(name))); err != nil {
 					return fmt.Errorf("truncating table %s: %w", name, err)
 				}
 			}
@@ -330,6 +330,10 @@ func newDBTruncateCmd(flags *globalFlags) *cobra.Command {
 	cmd.Flags().BoolVar(&force, "force", false, "confirm destructive database truncate")
 
 	return cmd
+}
+
+func quoteIdentifier(name string) string {
+	return "`" + strings.ReplaceAll(name, "`", "``") + "`"
 }
 
 func newDBLoadCmd(flags *globalFlags) *cobra.Command {
