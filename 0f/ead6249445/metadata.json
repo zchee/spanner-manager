@@ -1,0 +1,19 @@
+{
+  "cli_version": "dev",
+  "checkpoint_id": "0fead6249445",
+  "strategy": "manual-commit",
+  "branch": "refactor",
+  "checkpoints_count": 0,
+  "files_touched": [
+    "cmd/progress.go",
+    "diff/diff_test.go"
+  ],
+  "sessions": [
+    {
+      "metadata": "/0f/ead6249445/0/metadata.json",
+      "transcript": "/0f/ead6249445/0/full.jsonl",
+      "content_hash": "/0f/ead6249445/0/content_hash.txt",
+      "prompt": ""
+    }
+  ]
+}
