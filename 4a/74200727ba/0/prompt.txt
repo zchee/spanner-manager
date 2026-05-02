@@ -1,0 +1,1 @@
+$oh-my-codex:autopilot "Should the review at https://github.com/zchee/spanner-manager/pull/9#discussion_r3175996970 be revised?"

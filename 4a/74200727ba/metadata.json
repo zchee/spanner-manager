@@ -1,0 +1,26 @@
+{
+  "cli_version": "dev",
+  "checkpoint_id": "4a74200727ba",
+  "strategy": "manual-commit",
+  "branch": "refactor",
+  "checkpoints_count": 1,
+  "files_touched": [
+    "cmd/db.go",
+    "cmd/db_test.go"
+  ],
+  "sessions": [
+    {
+      "metadata": "/4a/74200727ba/0/metadata.json",
+      "transcript": "/4a/74200727ba/0/full.jsonl",
+      "content_hash": "/4a/74200727ba/0/content_hash.txt",
+      "prompt": "/4a/74200727ba/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 82958,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 1610112,
+    "output_tokens": 8760,
+    "api_call_count": 25
+  }
+}
