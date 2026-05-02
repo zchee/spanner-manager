@@ -22,6 +22,10 @@ func TestSingularizeIdentifier(t *testing.T) {
 		inflections []Inflection
 		want        string
 	}{
+		"empty identifier": {
+			name: "",
+			want: "",
+		},
 		"uncountable series": {
 			name: "Series",
 			want: "Series",
@@ -44,6 +48,35 @@ func TestSingularizeIdentifier(t *testing.T) {
 				{Singular: "sprocket", Plural: "sprocki"},
 			},
 			want: "UserSprocket",
+		},
+		"custom inflection lower-case suffix": {
+			name: "user_sprocki",
+			inflections: []Inflection{
+				{Singular: "sprocket", Plural: "sprocki"},
+			},
+			want: "user_sprocket",
+		},
+		"custom inflection upper-case suffix": {
+			name: "USER_SPROCKI",
+			inflections: []Inflection{
+				{Singular: "sprocket", Plural: "sprocki"},
+			},
+			want: "USER_SPROCKET",
+		},
+		"custom inflection skips incomplete rule": {
+			name: "UserSprocki",
+			inflections: []Inflection{
+				{Singular: "sprocket"},
+				{Plural: "sprocki"},
+			},
+			want: "UserSprocki",
+		},
+		"custom inflection empty singular keeps default pluralizer": {
+			name: "UserSprocki",
+			inflections: []Inflection{
+				{Singular: "", Plural: "sprocki"},
+			},
+			want: "UserSprocki",
 		},
 	}
 

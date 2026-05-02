@@ -48,6 +48,15 @@ func TestDedupeImportSpecs(t *testing.T) {
 				{Path: "fmt"},
 			},
 		},
+		"success: ignore empty import paths": {
+			imports: []ImportSpec{
+				{},
+				{Path: "fmt"},
+			},
+			want: []ImportSpec{
+				{Path: "fmt"},
+			},
+		},
 	}
 
 	for name, tt := range tests {
@@ -93,6 +102,38 @@ func TestRefreshTypeMetadata_PreservesPrimaryKeyOrdinal(t *testing.T) {
 	refreshTypeMetadata(&typ)
 
 	if diff := gocmp.Diff([]Field{typ.Fields[1], typ.Fields[0]}, typ.PrimaryKeyFields); diff != "" {
+		t.Fatalf("primary key fields mismatch (-want +got):\n%s", diff)
+	}
+}
+
+func TestRefreshTypeMetadata_DropsStaleAndAppendsNewPrimaryKeys(t *testing.T) {
+	typ := Type{
+		Fields: []Field{
+			{
+				Name:         "A",
+				ColumnName:   "a",
+				IsPrimaryKey: true,
+			},
+			{
+				Name:         "B",
+				ColumnName:   "b",
+				IsPrimaryKey: true,
+			},
+			{
+				Name:         "C",
+				ColumnName:   "c",
+				IsPrimaryKey: true,
+			},
+		},
+		PrimaryKeyFields: []Field{
+			{ColumnName: "missing"},
+			{ColumnName: "b"},
+		},
+	}
+
+	refreshTypeMetadata(&typ)
+
+	if diff := gocmp.Diff([]Field{typ.Fields[1], typ.Fields[0], typ.Fields[2]}, typ.PrimaryKeyFields); diff != "" {
 		t.Fatalf("primary key fields mismatch (-want +got):\n%s", diff)
 	}
 }
@@ -238,6 +279,21 @@ func TestGoTypeForSpannerTypeString(t *testing.T) {
 		want        goTypeInfo
 		wantErr     string
 	}{
+		"success: BOOL not null": {
+			spannerType: "BOOL",
+			want: goTypeInfo{
+				Expr:            "bool",
+				BaseSpannerType: "BOOL",
+			},
+		},
+		"success: BOOL nullable": {
+			spannerType: "BOOL",
+			nullable:    true,
+			want: goTypeInfo{
+				Expr:            "spanner.NullBool",
+				BaseSpannerType: "BOOL",
+			},
+		},
 		"success: INT64 not null": {
 			spannerType: "INT64",
 			want: goTypeInfo{
@@ -251,6 +307,36 @@ func TestGoTypeForSpannerTypeString(t *testing.T) {
 			want: goTypeInfo{
 				Expr:            "spanner.NullInt64",
 				BaseSpannerType: "INT64",
+			},
+		},
+		"success: FLOAT32 not null": {
+			spannerType: "FLOAT32",
+			want: goTypeInfo{
+				Expr:            "float32",
+				BaseSpannerType: "FLOAT32",
+			},
+		},
+		"success: FLOAT32 nullable": {
+			spannerType: "FLOAT32",
+			nullable:    true,
+			want: goTypeInfo{
+				Expr:            "spanner.NullFloat32",
+				BaseSpannerType: "FLOAT32",
+			},
+		},
+		"success: FLOAT64 not null": {
+			spannerType: "FLOAT64",
+			want: goTypeInfo{
+				Expr:            "float64",
+				BaseSpannerType: "FLOAT64",
+			},
+		},
+		"success: FLOAT64 nullable": {
+			spannerType: "FLOAT64",
+			nullable:    true,
+			want: goTypeInfo{
+				Expr:            "spanner.NullFloat64",
+				BaseSpannerType: "FLOAT64",
 			},
 		},
 		"success: STRING(MAX) not null": {
@@ -268,12 +354,51 @@ func TestGoTypeForSpannerTypeString(t *testing.T) {
 				BaseSpannerType: "STRING",
 			},
 		},
+		"success: BYTES(MAX) not null": {
+			spannerType: "BYTES(MAX)",
+			want: goTypeInfo{
+				Expr:            "[]byte",
+				BaseSpannerType: "BYTES",
+			},
+		},
+		"success: BYTES(MAX) nullable": {
+			spannerType: "BYTES(MAX)",
+			nullable:    true,
+			want: goTypeInfo{
+				Expr:            "[]byte",
+				BaseSpannerType: "BYTES",
+			},
+		},
+		"success: DATE not null": {
+			spannerType: "DATE",
+			want: goTypeInfo{
+				Expr:            "civil.Date",
+				BaseSpannerType: "DATE",
+				Imports:         []ImportSpec{{Path: "cloud.google.com/go/civil"}},
+			},
+		},
+		"success: DATE nullable": {
+			spannerType: "DATE",
+			nullable:    true,
+			want: goTypeInfo{
+				Expr:            "spanner.NullDate",
+				BaseSpannerType: "DATE",
+			},
+		},
 		"success: TIMESTAMP not null": {
 			spannerType: "TIMESTAMP",
 			want: goTypeInfo{
 				Expr:            "time.Time",
 				BaseSpannerType: "TIMESTAMP",
 				Imports:         []ImportSpec{{Path: "time"}},
+			},
+		},
+		"success: TIMESTAMP nullable": {
+			spannerType: "TIMESTAMP",
+			nullable:    true,
+			want: goTypeInfo{
+				Expr:            "spanner.NullTime",
+				BaseSpannerType: "TIMESTAMP",
 			},
 		},
 		"success: TIMESTAMP array": {
@@ -283,6 +408,37 @@ func TestGoTypeForSpannerTypeString(t *testing.T) {
 				BaseSpannerType: "TIMESTAMP",
 				IsArray:         true,
 				Imports:         []ImportSpec{{Path: "time"}},
+			},
+		},
+		"success: NUMERIC not null": {
+			spannerType: "NUMERIC",
+			want: goTypeInfo{
+				Expr:            "big.Rat",
+				BaseSpannerType: "NUMERIC",
+				Imports:         []ImportSpec{{Path: "math/big"}},
+			},
+		},
+		"success: NUMERIC nullable": {
+			spannerType: "NUMERIC",
+			nullable:    true,
+			want: goTypeInfo{
+				Expr:            "spanner.NullNumeric",
+				BaseSpannerType: "NUMERIC",
+			},
+		},
+		"success: JSON not null": {
+			spannerType: "JSON",
+			want: goTypeInfo{
+				Expr:            "spanner.NullJSON",
+				BaseSpannerType: "JSON",
+			},
+		},
+		"success: JSON nullable": {
+			spannerType: "JSON",
+			nullable:    true,
+			want: goTypeInfo{
+				Expr:            "spanner.NullJSON",
+				BaseSpannerType: "JSON",
 			},
 		},
 		"success: UUID not null": {
@@ -367,12 +523,176 @@ func TestGoTypeForSchemaType_UUIDCompat(t *testing.T) {
 				BaseSpannerType: "UUID",
 			},
 		},
+		"non uuid named type falls back to generic column value": {
+			schemaType: &ast.NamedType{Path: []*ast.Ident{
+				{Name: "example"},
+				{Name: "Message"},
+			}},
+			want: goTypeInfo{
+				Expr:            "spanner.GenericColumnValue",
+				BaseSpannerType: "MESSAGE",
+			},
+		},
+		"unknown nullable scalar falls back to generic column value": {
+			schemaType: &ast.ScalarSchemaType{Name: ast.ScalarTypeName("PROTO")},
+			nullable:   true,
+			want: goTypeInfo{
+				Expr:            "spanner.GenericColumnValue",
+				BaseSpannerType: "PROTO",
+			},
+		},
+		"unknown non nullable scalar falls back to generic column value": {
+			schemaType: &ast.ScalarSchemaType{Name: ast.ScalarTypeName("PROTO")},
+			want: goTypeInfo{
+				Expr:            "spanner.GenericColumnValue",
+				BaseSpannerType: "PROTO",
+			},
+		},
 	}
 
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
 			if diff := gocmp.Diff(tt.want, goTypeForSchemaType(tt.schemaType, tt.nullable)); diff != "" {
 				t.Fatalf("goTypeForSchemaType() mismatch (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+func TestImportSpecsFromConfig(t *testing.T) {
+	tests := map[string]struct {
+		paths   []string
+		want    []ImportSpec
+		wantErr string
+	}{
+		"success: trims blank paths and parses aliases": {
+			paths: []string{
+				" ",
+				"json = encoding/json",
+				"fmt",
+			},
+			want: []ImportSpec{
+				{Path: "encoding/json", Alias: "json"},
+				{Path: "fmt"},
+			},
+		},
+		"error: alias with empty path": {
+			paths:   []string{"json = "},
+			wantErr: `invalid import spec "json ="`,
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			got, err := importSpecsFromConfig(tt.paths)
+			if tt.wantErr != "" {
+				if err == nil {
+					t.Fatalf("importSpecsFromConfig(%v) error = nil, want substring %q", tt.paths, tt.wantErr)
+				}
+				if !strings.Contains(err.Error(), tt.wantErr) {
+					t.Fatalf("importSpecsFromConfig(%v) error = %q, want substring %q", tt.paths, err, tt.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("importSpecsFromConfig(%v) error = %v", tt.paths, err)
+			}
+			if diff := gocmp.Diff(tt.want, got); diff != "" {
+				t.Fatalf("import specs mismatch (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+func TestPathNameFromIdentPath(t *testing.T) {
+	tests := map[string]struct {
+		path []*ast.Ident
+		want string
+	}{
+		"empty path": {},
+		"multi part path": {
+			path: []*ast.Ident{
+				{Name: "example"},
+				{Name: "Message"},
+			},
+			want: "Message",
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			if got := pathNameFromIdentPath(tt.path); got != tt.want {
+				t.Fatalf("pathNameFromIdentPath() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestInferImportSpecsFromTypeExpr(t *testing.T) {
+	tests := map[string]struct {
+		expr string
+		want []ImportSpec
+	}{
+		"known qualifiers are deduped and sorted": {
+			expr: "json.RawMessage, time.Time, json.Decoder",
+			want: []ImportSpec{
+				{Path: "encoding/json"},
+				{Path: "time"},
+			},
+		},
+		"unknown qualifier is ignored": {
+			expr: "example.Type",
+			want: []ImportSpec{},
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			if diff := gocmp.Diff(tt.want, inferImportSpecsFromTypeExpr(tt.expr)); diff != "" {
+				t.Fatalf("inferImportSpecsFromTypeExpr(%q) mismatch (-want +got):\n%s", tt.expr, diff)
+			}
+		})
+	}
+}
+
+func TestCommitTimestampExpr(t *testing.T) {
+	tests := map[string]struct {
+		field Field
+		want  string
+		ok    bool
+	}{
+		"not commit timestamp": {
+			field: Field{GoType: "time.Time"},
+		},
+		"commit timestamp time": {
+			field: Field{
+				GoType:               "time.Time",
+				AllowCommitTimestamp: true,
+			},
+			want: "spanner.CommitTimestamp",
+			ok:   true,
+		},
+		"commit timestamp nullable time": {
+			field: Field{
+				GoType:               "spanner.NullTime",
+				AllowCommitTimestamp: true,
+			},
+			want: "spanner.NullTime{Time: spanner.CommitTimestamp, Valid: true}",
+			ok:   true,
+		},
+		"commit timestamp unsupported go type": {
+			field: Field{
+				GoType:               "string",
+				AllowCommitTimestamp: true,
+			},
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			got, ok := commitTimestampExpr(tt.field)
+			if got != tt.want || ok != tt.ok {
+				t.Fatalf("commitTimestampExpr(%+v) = %q, %v; want %q, %v", tt.field, got, ok, tt.want, tt.ok)
 			}
 		})
 	}
