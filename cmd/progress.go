@@ -15,6 +15,7 @@
 package cmd
 
 import (
+	"fmt"
 	"time"
 
 	progressbar "github.com/schollz/progressbar/v3"
@@ -23,12 +24,7 @@ import (
 
 // writeProgress writes a human-readable progress state to stderr.
 func writeProgress(cmd *cobra.Command, format string, args ...any) error {
-	bar := progressbar.NewOptions(
-		1,
-		progressbar.OptionSetWriter(cmd.ErrOrStderr()),
-		progressbar.OptionSetVisibility(false),
-	)
-	_, err := progressbar.Bprintf(bar, format+"\n", args...)
+	_, err := fmt.Fprintf(cmd.ErrOrStderr(), format+"\n", args...)
 	return err
 }
 
@@ -67,13 +63,10 @@ func runWithProgress(cmd *cobra.Command, description string, run func() error) e
 
 	runErr := run()
 	close(stop)
-	spinnerErr := <-progressErr
-	finishErr := bar.Finish()
+	<-progressErr
+	_ = bar.Finish()
 	if runErr != nil {
 		return runErr
 	}
-	if spinnerErr != nil {
-		return spinnerErr
-	}
-	return finishErr
+	return nil
 }

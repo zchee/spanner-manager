@@ -16,6 +16,7 @@ package cmd
 
 import (
 	"bytes"
+	"context"
 	"io"
 	"strings"
 	"testing"
@@ -47,7 +48,7 @@ func TestDestructiveDBCommandsRequireForce(t *testing.T) {
 		},
 		"truncate": {
 			command: newDBTruncateCmd(flags),
-			want:    "truncate database is destructive for projects/test-project/instances/test-instance/databases/test-database; rerun with --force to confirm",
+			want:    "truncate database is destructive for projects/test-project/instances/test-instance/databases/test-database; truncation only respects interleave order, so foreign-key-only relationships may need manual handling; rerun with --force to confirm",
 		},
 	}
 
@@ -146,7 +147,7 @@ func TestRequireDestructiveConfirmation(t *testing.T) {
 		"full target included in error": {
 			operation: "truncate database",
 			config:    fullConfig,
-			wantErr:   "truncate database is destructive for projects/test-project/instances/test-instance/databases/test-database; rerun with --force to confirm",
+			wantErr:   "truncate database is destructive for projects/test-project/instances/test-instance/databases/test-database; truncation only respects interleave order, so foreign-key-only relationships may need manual handling; rerun with --force to confirm",
 		},
 		"incomplete target falls back to generic wording": {
 			operation: "reset database",
@@ -200,6 +201,13 @@ func TestDBCommandsRejectPositionalArguments(t *testing.T) {
 	}
 }
 
+func TestDBTruncateDocumentsForeignKeyLimitation(t *testing.T) {
+	cmd := newDBTruncateCmd(&globalFlags{})
+	if !strings.Contains(cmd.Long, "non-interleaved foreign keys may require manual cleanup order") {
+		t.Fatalf("truncate long description = %q, want explicit non-interleaved FK limitation", cmd.Long)
+	}
+}
+
 func TestTopologicalSortOrdersChildrenBeforeParents(t *testing.T) {
 	tables := []tableRelation{
 		{name: "Parents"},
@@ -212,6 +220,56 @@ func TestTopologicalSortOrdersChildrenBeforeParents(t *testing.T) {
 	want := []string{"Grandchildren", "Children", "Parents", "Orphan"}
 	if diff := gocmp.Diff(want, got); diff != "" {
 		t.Fatalf("topologicalSort() mismatch (-want +got):\n%s", diff)
+	}
+}
+
+func TestTruncateTablesSQLFiltersViews(t *testing.T) {
+	tests := map[string]string{
+		"base tables":       "t.TABLE_TYPE = 'BASE TABLE'",
+		"schema migrations": "t.TABLE_NAME != 'SchemaMigrations'",
+	}
+
+	for name, want := range tests {
+		t.Run(name, func(t *testing.T) {
+			if !strings.Contains(truncateTablesSQL, want) {
+				t.Fatalf("truncateTablesSQL = %q, want %q", truncateTablesSQL, want)
+			}
+		})
+	}
+}
+
+func TestDBResetDoesNotDuplicateDropProgressLine(t *testing.T) {
+	flags := &globalFlags{
+		project:  "test-project",
+		instance: "test-instance",
+		database: "test-database",
+	}
+
+	var stderr bytes.Buffer
+	fakeClient := &fakeAdminDatabaseClient{}
+	previousFactory := newAdminDatabaseClient
+	newAdminDatabaseClient = func(ctx context.Context, cfg spannerutil.Config) (adminDatabaseClient, error) {
+		return fakeClient, nil
+	}
+	t.Cleanup(func() {
+		newAdminDatabaseClient = previousFactory
+	})
+
+	err := executeDBCommandForTest(t, newDBResetCmd(flags), withCommandErr(&stderr), "--force")
+	if err != nil {
+		t.Fatalf("reset command error = %v, want nil", err)
+	}
+	if fakeClient.dropCalls != 1 {
+		t.Fatalf("DropDatabase calls = %d, want 1", fakeClient.dropCalls)
+	}
+	if fakeClient.createCalls != 1 {
+		t.Fatalf("CreateDatabase calls = %d, want 1", fakeClient.createCalls)
+	}
+	if got := stderr.String(); strings.Contains(got, "Dropping database if it exists: projects/test-project/instances/test-instance/databases/test-database") {
+		t.Fatalf("stderr = %q, want no duplicate drop progress line with database path", got)
+	}
+	if !strings.Contains(stderr.String(), "Resetting database: projects/test-project/instances/test-instance/databases/test-database") {
+		t.Fatalf("stderr = %q, want reset progress line", stderr.String())
 	}
 }
 
@@ -247,4 +305,25 @@ func executeDBCommandForTest(t *testing.T, command *cobra.Command, optsOrArgs ..
 	command.SilenceErrors = true
 
 	return command.Execute()
+}
+
+type fakeAdminDatabaseClient struct {
+	dropCalls   int
+	createCalls int
+}
+
+func (c *fakeAdminDatabaseClient) Close() error { return nil }
+
+func (c *fakeAdminDatabaseClient) CreateDatabase(context.Context, []string) error {
+	c.createCalls++
+	return nil
+}
+
+func (c *fakeAdminDatabaseClient) DropDatabase(context.Context) error {
+	c.dropCalls++
+	return nil
+}
+
+func (c *fakeAdminDatabaseClient) GetDatabaseDDL(context.Context) ([]string, error) {
+	return nil, nil
 }

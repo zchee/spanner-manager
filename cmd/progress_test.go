@@ -18,7 +18,9 @@ import (
 	"bytes"
 	"errors"
 	"strings"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/spf13/cobra"
 )
@@ -105,10 +107,64 @@ func TestRunWithProgressReturnsOperationError(t *testing.T) {
 	}
 }
 
+func TestRunWithProgressIgnoresRenderErrorsAfterOperationSucceeds(t *testing.T) {
+	var failWrites atomic.Bool
+	command := &cobra.Command{}
+	command.SetErr(&conditionalFailingWriter{
+		fail: &failWrites,
+		err:  errors.New("stderr closed"),
+	})
+
+	runCalled := false
+	err := runWithProgress(command, "Creating database", func() error {
+		runCalled = true
+		failWrites.Store(true)
+		time.Sleep(250 * time.Millisecond)
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("runWithProgress() error = %v, want nil after operation success", err)
+	}
+	if !runCalled {
+		t.Fatal("runWithProgress() did not run operation")
+	}
+}
+
+func TestRunWithProgressPrefersOperationErrorOverRenderErrors(t *testing.T) {
+	wantErr := errors.New("create failed")
+	var failWrites atomic.Bool
+	command := &cobra.Command{}
+	command.SetErr(&conditionalFailingWriter{
+		fail: &failWrites,
+		err:  errors.New("stderr closed"),
+	})
+
+	err := runWithProgress(command, "Creating database", func() error {
+		failWrites.Store(true)
+		time.Sleep(250 * time.Millisecond)
+		return wantErr
+	})
+	if !errors.Is(err, wantErr) {
+		t.Fatalf("runWithProgress() error = %v, want operation error %v", err, wantErr)
+	}
+}
+
 type failingWriter struct {
 	err error
 }
 
 func (w failingWriter) Write([]byte) (int, error) {
 	return 0, w.err
+}
+
+type conditionalFailingWriter struct {
+	fail *atomic.Bool
+	err  error
+}
+
+func (w *conditionalFailingWriter) Write(p []byte) (int, error) {
+	if w.fail.Load() {
+		return 0, w.err
+	}
+	return len(p), nil
 }

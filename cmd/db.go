@@ -15,6 +15,7 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"strings"
@@ -26,6 +27,22 @@ import (
 	"github.com/zchee/spanner-manager/spannerutil"
 	"github.com/zchee/spanner-manager/sqlutil"
 )
+
+type adminDatabaseClient interface {
+	Close() error
+	CreateDatabase(ctx context.Context, statements []string) error
+	DropDatabase(ctx context.Context) error
+	GetDatabaseDDL(ctx context.Context) ([]string, error)
+}
+
+var newAdminDatabaseClient = func(ctx context.Context, cfg spannerutil.Config) (adminDatabaseClient, error) {
+	return spannerutil.NewAdminClient(ctx, cfg)
+}
+
+const truncateTablesSQL = `SELECT t.TABLE_NAME, COALESCE(t.PARENT_TABLE_NAME, '') AS PARENT_TABLE_NAME
+					  FROM INFORMATION_SCHEMA.TABLES t
+					  WHERE t.TABLE_SCHEMA = '' AND t.TABLE_TYPE = 'BASE TABLE' AND t.TABLE_NAME != 'SchemaMigrations'
+					  ORDER BY t.TABLE_NAME`
 
 func newDBCmd(flags *globalFlags) *cobra.Command {
 	cmd := &cobra.Command{
@@ -81,7 +98,7 @@ func newDBCreateCmd(flags *globalFlags) *cobra.Command {
 				statements = stmts
 			}
 
-			client, err := spannerutil.NewAdminClient(ctx, cfg)
+			client, err := newAdminDatabaseClient(ctx, cfg)
 			if err != nil {
 				return err
 			}
@@ -131,7 +148,7 @@ func newDBDropCmd(flags *globalFlags) *cobra.Command {
 				return err
 			}
 
-			client, err := spannerutil.NewAdminClient(ctx, cfg)
+			client, err := newAdminDatabaseClient(ctx, cfg)
 			if err != nil {
 				return err
 			}
@@ -183,7 +200,7 @@ func newDBResetCmd(flags *globalFlags) *cobra.Command {
 				return err
 			}
 
-			client, err := spannerutil.NewAdminClient(ctx, cfg)
+			client, err := newAdminDatabaseClient(ctx, cfg)
 			if err != nil {
 				return err
 			}
@@ -192,10 +209,6 @@ func newDBResetCmd(flags *globalFlags) *cobra.Command {
 					err = cerr
 				}
 			}()
-
-			if err := writeProgress(cmd, "Dropping database if it exists: %s", cfg.DatabasePath()); err != nil {
-				return err
-			}
 
 			// Drop (ignore error if database doesn't exist).
 			if err := runWithProgress(cmd, "Dropping database if it exists", func() error {
@@ -218,10 +231,6 @@ func newDBResetCmd(flags *globalFlags) *cobra.Command {
 					return fmt.Errorf("parsing schema file: %w", err)
 				}
 				statements = stmts
-			}
-
-			if err := writeProgress(cmd, "Creating database: %s", cfg.DatabasePath()); err != nil {
-				return err
 			}
 
 			if err := runWithProgress(cmd, "Creating database", func() error {
@@ -249,7 +258,7 @@ func newDBTruncateCmd(flags *globalFlags) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "truncate",
 		Short: "Truncate all tables",
-		Long:  "Truncate all tables in the database, preserving the SchemaMigrations table. Respects interleave order (child tables first). This is destructive and requires --force.",
+		Long:  "Truncate all base tables in the database, preserving the SchemaMigrations table. Respects interleave order (child tables first); non-interleaved foreign keys may require manual cleanup order. This is destructive and requires --force.",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) (err error) {
 			ctx := cmd.Context()
@@ -279,10 +288,7 @@ func newDBTruncateCmd(flags *globalFlags) *cobra.Command {
 
 			// Query table names and their parent relationships from INFORMATION_SCHEMA.
 			iter := client.Single().Query(ctx, spanner.Statement{
-				SQL: `SELECT t.TABLE_NAME, COALESCE(t.PARENT_TABLE_NAME, '') AS PARENT_TABLE_NAME
-					  FROM INFORMATION_SCHEMA.TABLES t
-					  WHERE t.TABLE_SCHEMA = '' AND t.TABLE_NAME != 'SchemaMigrations'
-					  ORDER BY t.TABLE_NAME`,
+				SQL: truncateTablesSQL,
 			})
 
 			var tables []tableRelation
@@ -346,7 +352,7 @@ func newDBLoadCmd(flags *globalFlags) *cobra.Command {
 				return err
 			}
 
-			client, err := spannerutil.NewAdminClient(ctx, cfg)
+			client, err := newAdminDatabaseClient(ctx, cfg)
 			if err != nil {
 				return err
 			}
@@ -401,6 +407,9 @@ func requireDestructiveConfirmation(operation string, cfg spannerutil.Config, fo
 	if cfg.Project == "" || cfg.Instance == "" || cfg.Database == "" {
 		target = "the configured database"
 	}
+	if operation == "truncate database" {
+		return fmt.Errorf("%s is destructive for %s; truncation only respects interleave order, so foreign-key-only relationships may need manual handling; rerun with --force to confirm", operation, target)
+	}
 
 	return fmt.Errorf("%s is destructive for %s; rerun with --force to confirm", operation, target)
 }
@@ -425,8 +434,10 @@ type tableRelation struct {
 	parent string
 }
 
-// topologicalSort sorts tables so that child tables come before parent tables.
-// This ensures that DELETE operations respect foreign key / interleave constraints.
+// topologicalSort sorts tables so that interleaved child tables come before
+// parent tables.
+// Non-interleaved foreign key dependencies are not represented in
+// INFORMATION_SCHEMA.TABLES.PARENT_TABLE_NAME and may still fail at delete time.
 func topologicalSort(tables []tableRelation) []string {
 	// Build a map of parent -> children.
 	children := make(map[string][]string)
