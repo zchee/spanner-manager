@@ -1,0 +1,27 @@
+{
+  "cli_version": "dev",
+  "checkpoint_id": "15cffb7aa4de",
+  "strategy": "manual-commit",
+  "checkpoints_count": 0,
+  "files_touched": [
+    "codegen/generator.go",
+    "codegen/generator_test.go",
+    "codegen/loader.go",
+    "codegen/loader_test.go"
+  ],
+  "sessions": [
+    {
+      "metadata": "/15/cffb7aa4de/0/metadata.json",
+      "transcript": "/15/cffb7aa4de/0/full.jsonl",
+      "content_hash": "/15/cffb7aa4de/0/content_hash.txt",
+      "prompt": "/15/cffb7aa4de/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 55842,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 930048,
+    "output_tokens": 8610,
+    "api_call_count": 22
+  }
+}
