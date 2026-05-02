@@ -17,6 +17,7 @@ package codegen
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	gocmp "github.com/google/go-cmp/cmp"
@@ -99,6 +100,24 @@ func TestDDLFileSource_Load(t *testing.T) {
 	}
 	if typ.PrimaryKeyFields[0].Name != "UserID" {
 		t.Errorf("primary key field = %q, want %q", typ.PrimaryKeyFields[0].Name, "UserID")
+	}
+}
+
+func TestInformationSchemaSource_loadTablesStatementFiltersBaseTables(t *testing.T) {
+	stmt := loadTablesStatement()
+	sql := strings.Join(strings.Fields(stmt.SQL), " ")
+
+	if !strings.Contains(sql, "FROM INFORMATION_SCHEMA.TABLES") {
+		t.Fatalf("loadTablesStatement SQL = %q, want INFORMATION_SCHEMA.TABLES query", stmt.SQL)
+	}
+	if !strings.Contains(sql, "TABLE_SCHEMA = ''") {
+		t.Fatalf("loadTablesStatement SQL = %q, want empty table schema filter", stmt.SQL)
+	}
+	if !strings.Contains(sql, "TABLE_TYPE = 'BASE TABLE'") {
+		t.Fatalf("loadTablesStatement SQL = %q, want BASE TABLE filter", stmt.SQL)
+	}
+	if !strings.Contains(sql, "ORDER BY TABLE_NAME") {
+		t.Fatalf("loadTablesStatement SQL = %q, want deterministic table ordering", stmt.SQL)
 	}
 }
 

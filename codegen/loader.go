@@ -64,10 +64,7 @@ func (s *InformationSchemaSource) Load(ctx context.Context) (*Schema, error) {
 }
 
 func (s *InformationSchemaSource) loadTables(ctx context.Context) ([]string, error) {
-	iter := s.client.Single().Query(ctx, spanner.Statement{
-		SQL: `SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES
-			  WHERE TABLE_SCHEMA = '' ORDER BY TABLE_NAME`,
-	})
+	iter := s.client.Single().Query(ctx, loadTablesStatement())
 
 	var tables []string
 	if err := iter.Do(func(row *spanner.Row) error {
@@ -82,6 +79,14 @@ func (s *InformationSchemaSource) loadTables(ctx context.Context) ([]string, err
 	}
 
 	return tables, nil
+}
+
+func loadTablesStatement() spanner.Statement {
+	return spanner.Statement{
+		SQL: `SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES
+			  WHERE TABLE_SCHEMA = '' AND TABLE_TYPE = 'BASE TABLE'
+			  ORDER BY TABLE_NAME`,
+	}
 }
 
 func (s *InformationSchemaSource) loadType(ctx context.Context, tableName string) (*Type, error) {

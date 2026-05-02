@@ -624,21 +624,9 @@ func (g *Generator) formatGoSource(filename string, src []byte) ([]byte, error) 
 		generatedFile = absPath
 	}
 
-	importsProcessMu.Lock()
-	previousLocalPrefix := imports.LocalPrefix
-	imports.LocalPrefix = modulePath
-	defer func() {
-		imports.LocalPrefix = previousLocalPrefix
-		importsProcessMu.Unlock()
-	}()
-	formatted, err := imports.Process(generatedFile, src, &imports.Options{
-		TabWidth:  8,
-		TabIndent: true,
-		Comments:  true,
-		Fragment:  true,
-	})
+	formatted, err := processImportsWithLocalPrefix(generatedFile, src, modulePath)
 	if err != nil {
-		return nil, fmt.Errorf("goimports: %w", err)
+		return nil, err
 	}
 
 	formatted, err = gofumpt.Source(formatted, gofumpt.Options{
@@ -648,6 +636,29 @@ func (g *Generator) formatGoSource(filename string, src []byte) ([]byte, error) 
 	})
 	if err != nil {
 		return nil, fmt.Errorf("gofumpt: %w", err)
+	}
+
+	return formatted, nil
+}
+
+func processImportsWithLocalPrefix(generatedFile string, src []byte, modulePath string) ([]byte, error) {
+	importsProcessMu.Lock()
+	defer importsProcessMu.Unlock()
+
+	previousLocalPrefix := imports.LocalPrefix
+	imports.LocalPrefix = modulePath
+	defer func() {
+		imports.LocalPrefix = previousLocalPrefix
+	}()
+
+	formatted, err := imports.Process(generatedFile, src, &imports.Options{
+		TabWidth:  8,
+		TabIndent: true,
+		Comments:  true,
+		Fragment:  true,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("goimports: %w", err)
 	}
 
 	return formatted, nil

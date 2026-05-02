@@ -960,6 +960,25 @@ func TestGenerator_Generate_RestoresImportsLocalPrefix(t *testing.T) {
 	}
 }
 
+func TestProcessImportsWithLocalPrefixRestoresLocalPrefixOnError(t *testing.T) {
+	const originalLocalPrefix = "example.com/original"
+
+	previousLocalPrefix := goimports.LocalPrefix
+	goimports.LocalPrefix = originalLocalPrefix
+	t.Cleanup(func() {
+		goimports.LocalPrefix = previousLocalPrefix
+	})
+
+	_, err := processImportsWithLocalPrefix("broken.go", []byte("package broken\nfunc broken( {\n"), "example.com/generated")
+	if err == nil {
+		t.Fatal("processImportsWithLocalPrefix() error = nil, want goimports error")
+	}
+
+	if got := goimports.LocalPrefix; got != originalLocalPrefix {
+		t.Fatalf("imports.LocalPrefix = %q, want restored %q", got, originalLocalPrefix)
+	}
+}
+
 func TestDetectGoModuleConfig(t *testing.T) {
 	tests := map[string]struct {
 		setup          func(t *testing.T) string
