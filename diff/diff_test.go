@@ -303,10 +303,11 @@ func TestDiff_GoldenFromHammer(t *testing.T) {
 	// These cases are ported from daichirata/hammer's diff_test.go and kept as
 	// exact expectations for the local diff engine's current SQL output.
 	tests := []struct {
-		name string
-		from string
-		to   string
-		want []Statement
+		name              string
+		from              string
+		to                string
+		want              []Statement
+		forbidSQLContains []string
 	}{
 		{
 			name: "drop table",
@@ -1024,6 +1025,28 @@ CREATE TABLE T1 (id INT64);
 			},
 		},
 		{
+			name: "revoke one grant on unchanged view without replacing view",
+			from: `
+CREATE ROLE role_keep;
+CREATE ROLE role_drop;
+CREATE VIEW V1 SQL SECURITY INVOKER AS SELECT 1;
+GRANT SELECT ON VIEW V1 TO ROLE role_keep;
+GRANT SELECT ON VIEW V1 TO ROLE role_drop;
+`,
+			to: `
+CREATE ROLE role_keep;
+CREATE ROLE role_drop;
+CREATE VIEW V1 SQL SECURITY INVOKER AS SELECT 1;
+GRANT SELECT ON VIEW V1 TO ROLE role_keep;
+`,
+			want: []Statement{
+				{
+					Kind: sqlutil.KindDDL,
+					SQL:  `REVOKE SELECT ON VIEW V1 FROM ROLE role_drop`,
+				},
+			},
+		},
+		{
 			name: "revoke view grant before drop role",
 			from: `
 CREATE ROLE role1;
@@ -1036,15 +1059,33 @@ CREATE VIEW V1 SQL SECURITY INVOKER AS SELECT 1;
 			want: []Statement{
 				{
 					Kind: sqlutil.KindDDL,
-					SQL:  `CREATE OR REPLACE VIEW V1 SQL SECURITY INVOKER AS SELECT 1`,
-				},
-				{
-					Kind: sqlutil.KindDDL,
 					SQL:  `REVOKE SELECT ON VIEW V1 FROM ROLE role1`,
 				},
 				{
 					Kind: sqlutil.KindDDL,
 					SQL:  `DROP ROLE role1`,
+				},
+			},
+		},
+		{
+			name: "revoke select on unchanged view without replacing view",
+			from: `
+CREATE ROLE role1;
+CREATE ROLE role2;
+CREATE VIEW V1 SQL SECURITY INVOKER AS SELECT 1;
+GRANT SELECT ON VIEW V1 TO ROLE role1;
+GRANT SELECT ON VIEW V1 TO ROLE role2;
+`,
+			to: `
+CREATE ROLE role1;
+CREATE ROLE role2;
+CREATE VIEW V1 SQL SECURITY INVOKER AS SELECT 1;
+GRANT SELECT ON VIEW V1 TO ROLE role1;
+`,
+			want: []Statement{
+				{
+					Kind: sqlutil.KindDDL,
+					SQL:  `REVOKE SELECT ON VIEW V1 FROM ROLE role2`,
 				},
 			},
 		},
@@ -1125,6 +1166,14 @@ CREATE TABLE T1 (id INT64);
 				t.Fatalf("Diff() error = %v", err)
 			}
 
+			for _, forbidden := range tt.forbidSQLContains {
+				for _, stmt := range got {
+					if strings.Contains(stmt.SQL, forbidden) {
+						t.Fatalf("Diff() emitted forbidden SQL %q in statement %q", forbidden, stmt.SQL)
+					}
+				}
+			}
+
 			if diff := gocmp.Diff(tt.want, got); diff != "" {
 				t.Errorf("Diff() mismatch (-want +got):\n%s", diff)
 			}
@@ -1134,10 +1183,11 @@ CREATE TABLE T1 (id INT64);
 
 func TestDiff_ExtraBeyondHammer(t *testing.T) {
 	tests := []struct {
-		name string
-		from string
-		to   string
-		want []Statement
+		name              string
+		from              string
+		to                string
+		want              []Statement
+		forbidSQLContains []string
 	}{
 		{
 			name: "create schema",
@@ -1299,6 +1349,14 @@ OPTIONS(distance_type='EUCLIDEAN');
 				t.Fatalf("Diff() error = %v", err)
 			}
 
+			for _, forbidden := range tt.forbidSQLContains {
+				for _, stmt := range got {
+					if strings.Contains(stmt.SQL, forbidden) {
+						t.Fatalf("Diff() emitted forbidden SQL %q in statement %q", forbidden, stmt.SQL)
+					}
+				}
+			}
+
 			if diff := gocmp.Diff(tt.want, got); diff != "" {
 				t.Errorf("Diff() mismatch (-want +got):\n%s", diff)
 			}
@@ -1443,6 +1501,25 @@ CREATE VIEW ActiveUsers SQL SECURITY INVOKER AS SELECT UserId, Name FROM Users W
 			forbidSQLContains: []string{`CREATE OR REPLACE VIEW ActiveUsers`},
 		},
 		{
+			name: "dropping a view grant only revokes the grant",
+			from: `
+CREATE ROLE role1;
+CREATE VIEW V1 SQL SECURITY INVOKER AS SELECT 1;
+GRANT SELECT ON VIEW V1 TO ROLE role1;
+`,
+			to: `
+CREATE ROLE role1;
+CREATE VIEW V1 SQL SECURITY INVOKER AS SELECT 1;
+`,
+			want: []Statement{
+				{
+					Kind: sqlutil.KindDDL,
+					SQL:  `REVOKE SELECT ON VIEW V1 FROM ROLE role1`,
+				},
+			},
+			forbidSQLContains: []string{`CREATE OR REPLACE VIEW V1`},
+		},
+		{
 			name: "view literal whitespace changes are not normalized away",
 			from: `
 CREATE TABLE Users (UserId INT64 NOT NULL) PRIMARY KEY(UserId);
@@ -1454,6 +1531,25 @@ CREATE VIEW LiteralView SQL SECURITY INVOKER AS SELECT "active user" AS label FR
 `,
 			want: []Statement{
 				{Kind: sqlutil.KindDDL, SQL: `CREATE OR REPLACE VIEW LiteralView SQL SECURITY INVOKER AS SELECT "active user" AS label FROM Users`},
+			},
+		},
+		{
+			name: "view replace reissues surviving grants",
+			from: `
+CREATE ROLE role1;
+CREATE TABLE Users (UserId INT64 NOT NULL) PRIMARY KEY(UserId);
+CREATE VIEW LiteralView SQL SECURITY INVOKER AS SELECT "active  user" AS label FROM Users;
+GRANT SELECT ON VIEW LiteralView TO ROLE role1;
+`,
+			to: `
+CREATE ROLE role1;
+CREATE TABLE Users (UserId INT64 NOT NULL) PRIMARY KEY(UserId);
+CREATE VIEW LiteralView SQL SECURITY INVOKER AS SELECT "active user" AS label FROM Users;
+GRANT SELECT ON VIEW LiteralView TO ROLE role1;
+`,
+			want: []Statement{
+				{Kind: sqlutil.KindDDL, SQL: `CREATE OR REPLACE VIEW LiteralView SQL SECURITY INVOKER AS SELECT "active user" AS label FROM Users`},
+				{Kind: sqlutil.KindDDL, SQL: `GRANT SELECT ON VIEW LiteralView TO ROLE role1`},
 			},
 		},
 	}
@@ -1788,16 +1884,48 @@ func TestDiff_HelperCoverage(t *testing.T) {
 			t.Fatalf("normalizeConstraintSQL() = %q", got)
 		}
 
-		normalizeTests := map[string]string{
-			"double quoted literal":  "DEFAULT (\"a  b\")",
-			"single quoted literal":  "DEFAULT ('a  b')",
-			"backtick identifier":    "SELECT " + string(rune(0x60)) + "a  b" + string(rune(0x60)) + " FROM Users",
-			"backslash quote escape": "DEFAULT ('a\\'  b')",
-			"doubled quote escape":   "DEFAULT ('a''  b')",
+		normalizeTests := map[string]struct {
+			input string
+			want  string
+		}{
+			"double quoted literal":  {input: "DEFAULT (\"a  b\")", want: "DEFAULT (\"a  b\")"},
+			"single quoted literal":  {input: "DEFAULT ('a  b')", want: "DEFAULT ('a  b')"},
+			"backtick identifier":    {input: "SELECT " + string(rune(0x60)) + "a  b" + string(rune(0x60)) + " FROM Users", want: "SELECT " + string(rune(0x60)) + "a  b" + string(rune(0x60)) + " FROM Users"},
+			"backslash quote escape": {input: "DEFAULT ('a\\'  b')", want: "DEFAULT ('a\\'  b')"},
+			"doubled quote escape":   {input: "DEFAULT ('a''  b')", want: "DEFAULT ('a''  b')"},
+			"raw string literal":     {input: `DEFAULT (r"\n  b")`, want: `DEFAULT (r"\n  b")`},
+			"triple quoted literal":  {input: `DEFAULT ("""a  b""")`, want: `DEFAULT ("""a  b""")`},
 		}
-		for name, input := range normalizeTests {
-			if got := normalizeSQL(input); got != input {
-				t.Fatalf("%s: normalizeSQL() = %q, want %q", name, got, input)
+		for name, tt := range normalizeTests {
+			if got := normalizeSQL(tt.input); got != tt.want {
+				t.Fatalf("%s: normalizeSQL() = %q, want %q", name, got, tt.want)
+			}
+		}
+
+		commentTests := map[string]struct {
+			input string
+			want  string
+		}{
+			"line comment stripped": {
+				input: "SELECT 1 -- ignored\nFROM Users",
+				want:  "SELECT 1 FROM Users",
+			},
+			"block comment stripped": {
+				input: "SELECT /* ignored */ 1 FROM Users",
+				want:  "SELECT 1 FROM Users",
+			},
+			"line comment marker inside string": {
+				input: `DEFAULT ("-- not a comment") -- ignored`,
+				want:  `DEFAULT ("-- not a comment")`,
+			},
+			"block comment marker inside raw string": {
+				input: `DEFAULT (r"/* not a comment */") /* ignored */`,
+				want:  `DEFAULT (r"/* not a comment */")`,
+			},
+		}
+		for name, tt := range commentTests {
+			if got := normalizeSQL(tt.input); got != tt.want {
+				t.Fatalf("%s: normalizeSQL() = %q, want %q", name, got, tt.want)
 			}
 		}
 

@@ -276,9 +276,6 @@ func (g *generator) generate() []Statement {
 			continue
 		}
 		if g.viewEqual(fromView, toView) {
-			if g.viewHasDroppedGrant(fromView) {
-				stmts = append(stmts, g.generateReplaceView(toView)...)
-			}
 			continue
 		}
 		stmts = append(stmts, g.generateReplaceView(toView)...)
@@ -1230,15 +1227,6 @@ func (g *generator) viewEqual(x, y *View) bool {
 	return normalizeSQL(x.Raw.SQL()) == normalizeSQL(y.Raw.SQL())
 }
 
-func (g *generator) viewHasDroppedGrant(view *View) bool {
-	for _, grant := range g.from.grantsOnView(view) {
-		if _, exists := g.findGrant(g.to.grants, grant); !exists {
-			return true
-		}
-	}
-	return false
-}
-
 func (g *generator) setDefaultSemantics(col *ast.ColumnDef) *ast.ColumnDef {
 	columnCopy := *col
 	switch t := col.Type.(type) {
@@ -1410,6 +1398,12 @@ func (g *generator) findViewByKey(views []*View, key string) (*View, bool) {
 }
 
 func (g *generator) generateReplaceView(view *View) []Statement {
+	for _, grant := range g.from.grantsOnView(view) {
+		if g.isDroppedGrant(grant) {
+			continue
+		}
+		g.droppedGrants = append(g.droppedGrants, grant)
+	}
 	replacement := *view.Raw
 	replacement.OrReplace = true
 	return []Statement{ddlStatement(&replacement)}
@@ -1604,40 +1598,67 @@ func changedOptions(from, to *ast.Options) *ast.Options {
 
 func normalizeSQL(sql string) string {
 	var b strings.Builder
-	inString := false
-	var quote rune
 	spacePending := false
 
 	runes := []rune(strings.TrimSpace(sql))
 	for i := 0; i < len(runes); i++ {
 		r := runes[i]
-		if inString {
-			b.WriteRune(r)
-			if r == '\\' && i+1 < len(runes) {
-				i++
-				b.WriteRune(runes[i])
-				continue
-			}
-			if r == quote {
-				if i+1 < len(runes) && runes[i+1] == quote && quote != rune(0x60) {
-					i++
-					b.WriteRune(runes[i])
-					continue
-				}
-				inString = false
-			}
-			continue
-		}
 
 		switch r {
+		case '-':
+			if i+1 < len(runes) && runes[i+1] == '-' {
+				i += 2
+				for i < len(runes) && runes[i] != '\n' && runes[i] != '\r' {
+					i++
+				}
+				i--
+				spacePending = b.Len() > 0
+				continue
+			}
+			if spacePending && b.Len() > 0 {
+				b.WriteByte(' ')
+				spacePending = false
+			}
+			b.WriteRune(r)
+		case '/':
+			if i+1 < len(runes) && runes[i+1] == '*' {
+				i += 2
+				for i+1 < len(runes) && !(runes[i] == '*' && runes[i+1] == '/') {
+					i++
+				}
+				if i+1 < len(runes) {
+					i++
+				}
+				spacePending = b.Len() > 0
+				continue
+			}
+			if spacePending && b.Len() > 0 {
+				b.WriteByte(' ')
+				spacePending = false
+			}
+			b.WriteRune(r)
+		case 'r', 'R':
+			if i+1 < len(runes) && (runes[i+1] == '\'' || runes[i+1] == '"') {
+				if spacePending && b.Len() > 0 {
+					b.WriteByte(' ')
+					spacePending = false
+				}
+				b.WriteRune(r)
+				i++
+				i = writeQuotedSQL(&b, runes, i, true)
+				continue
+			}
+			if spacePending && b.Len() > 0 {
+				b.WriteByte(' ')
+				spacePending = false
+			}
+			b.WriteRune(r)
 		case '\'', '"', rune(0x60):
 			if spacePending && b.Len() > 0 {
 				b.WriteByte(' ')
 				spacePending = false
 			}
-			inString = true
-			quote = r
-			b.WriteRune(r)
+			i = writeQuotedSQL(&b, runes, i, false)
 		case ' ', '\t', '\n', '\r':
 			spacePending = b.Len() > 0
 		default:
@@ -1649,7 +1670,63 @@ func normalizeSQL(sql string) string {
 		}
 	}
 
-	return b.String()
+	return strings.TrimSpace(b.String())
+}
+
+func writeQuotedSQL(b *strings.Builder, runes []rune, start int, raw bool) int {
+	quote := runes[start]
+	triple := quote != rune(0x60) &&
+		start+2 < len(runes) &&
+		runes[start+1] == quote &&
+		runes[start+2] == quote
+
+	b.WriteRune(quote)
+	if triple {
+		b.WriteRune(quote)
+		b.WriteRune(quote)
+	}
+
+	i := start
+	if triple {
+		i += 3
+	} else {
+		i++
+	}
+	for i < len(runes) {
+		r := runes[i]
+		b.WriteRune(r)
+
+		if triple {
+			if r == quote && i+2 < len(runes) && runes[i+1] == quote && runes[i+2] == quote {
+				i++
+				b.WriteRune(runes[i])
+				i++
+				b.WriteRune(runes[i])
+				return i
+			}
+			i++
+			continue
+		}
+
+		if !raw && quote != rune(0x60) && r == '\\' && i+1 < len(runes) {
+			i++
+			b.WriteRune(runes[i])
+			i++
+			continue
+		}
+		if !raw && quote != rune(0x60) && r == quote && i+1 < len(runes) && runes[i+1] == quote {
+			i++
+			b.WriteRune(runes[i])
+			i++
+			continue
+		}
+		if r == quote {
+			return i
+		}
+		i++
+	}
+
+	return len(runes) - 1
 }
 
 func normalizeConstraintSQL(sql string) string {
