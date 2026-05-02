@@ -143,14 +143,14 @@ spanner-manager db create -p my-project -i my-instance -d my-db
 spanner-manager db create -p my-project -i my-instance -d my-db --schema schema.sql
 
 # Drop a database (irreversible)
-spanner-manager db drop -p my-project -i my-instance -d my-db
+spanner-manager db drop -p my-project -i my-instance -d my-db --force
 
 # Drop and recreate (useful for dev reset)
-spanner-manager db reset -p my-project -i my-instance -d my-db --schema schema.sql
+spanner-manager db reset -p my-project -i my-instance -d my-db --schema schema.sql --force
 
 # Truncate all tables (preserves schema and SchemaMigrations table)
 # Respects interleave order: child tables are deleted before parents
-spanner-manager db truncate -p my-project -i my-instance -d my-db
+spanner-manager db truncate -p my-project -i my-instance -d my-db --force
 
 # Export current DDL to stdout
 spanner-manager db load -p my-project -i my-instance -d my-db
@@ -204,7 +204,7 @@ state for `diff.Diff` to generate migration DDL.
 Current parser reference:
 
 - `go.mod` pins `github.com/cloudspannerecosystem/memefish`
-  `v0.6.3-0.20260220015148-e01a84ded886`.
+  `v0.6.3-0.20260429070454-64f857b2c61e`.
 - `sqlutil.ParseDDLs` delegates to `memefish.ParseDDLs`.
 - `diff.ParseDatabase` currently records only the statement families handled
   in its switch. Unknown `ast.DDL` nodes are a correctness gap until production
