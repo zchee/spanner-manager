@@ -193,6 +193,9 @@ func (r migrationRunner) execute(ctx context.Context, migrations []Migration, li
 		if limit > 0 && applied >= limit {
 			break
 		}
+		if !isExecutableMigrationKind(m.Kind) {
+			return applied, fmt.Errorf("unsupported migration kind %s for version %d (%s)", m.Kind, m.Version, m.Name)
+		}
 
 		// Set dirty flag.
 		if err := r.setVersion(ctx, m.Version, true); err != nil {
@@ -215,8 +218,6 @@ func (r migrationRunner) execute(ctx context.Context, migrations []Migration, li
 					return applied, fmt.Errorf("executing partitioned DML migration %d (%s): %w", m.Version, m.Name, err)
 				}
 			}
-		default:
-			return applied, fmt.Errorf("unsupported migration kind %s for version %d (%s)", m.Kind, m.Version, m.Name)
 		}
 
 		// Clear dirty flag.
@@ -228,6 +229,15 @@ func (r migrationRunner) execute(ctx context.Context, migrations []Migration, li
 	}
 
 	return applied, nil
+}
+
+func isExecutableMigrationKind(kind sqlutil.StatementKind) bool {
+	switch kind {
+	case sqlutil.KindDDL, sqlutil.KindDML, sqlutil.KindPartitionedDML:
+		return true
+	default:
+		return false
+	}
 }
 
 // isTableNotFoundError checks if the error indicates a table was not found.

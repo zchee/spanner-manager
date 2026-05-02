@@ -588,7 +588,7 @@ func TestExecuteMigrations(t *testing.T) {
 				{Kind: "partitionedDML", Statement: "-- PARTITIONED_DML\nUPDATE Users SET Region = 'global' WHERE Region IS NULL"},
 			},
 		},
-		"error: unsupported migration kind leaves migration dirty": {
+		"error: unsupported migration kind stops before dirty flag": {
 			input: []Migration{
 				{
 					Version:    4,
@@ -598,9 +598,6 @@ func TestExecuteMigrations(t *testing.T) {
 				},
 			},
 			wantErr: "unsupported migration kind StatementKind(99) for version 4 (unknown_kind)",
-			wantOperation: []runnerOperation{
-				{Kind: "setVersion", Version: 4, Dirty: true},
-			},
 		},
 		"error: clearing dirty flag reports version after successful statements": {
 			configure: func(r *recordingRunner) {
@@ -640,6 +637,38 @@ func TestExecuteMigrations(t *testing.T) {
 			}
 			if diff := gocmp.Diff(tt.wantOperation, recorder.operations); diff != "" {
 				t.Fatalf("ExecuteMigrations() operations mismatch (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+func TestIsExecutableMigrationKind(t *testing.T) {
+	tests := map[string]struct {
+		kind sqlutil.StatementKind
+		want bool
+	}{
+		"success: DDL is executable": {
+			kind: sqlutil.KindDDL,
+			want: true,
+		},
+		"success: DML is executable": {
+			kind: sqlutil.KindDML,
+			want: true,
+		},
+		"success: partitioned DML is executable": {
+			kind: sqlutil.KindPartitionedDML,
+			want: true,
+		},
+		"success: unknown kind is rejected": {
+			kind: sqlutil.StatementKind(99),
+			want: false,
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			if got := isExecutableMigrationKind(tt.kind); got != tt.want {
+				t.Fatalf("isExecutableMigrationKind(%v) = %t, want %t", tt.kind, got, tt.want)
 			}
 		})
 	}
