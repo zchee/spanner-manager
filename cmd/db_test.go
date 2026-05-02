@@ -149,14 +149,6 @@ func TestRequireDestructiveConfirmation(t *testing.T) {
 			config:    fullConfig,
 			wantErr:   "truncate database is destructive for projects/test-project/instances/test-instance/databases/test-database; truncation only respects interleave order, so foreign-key-only relationships may need manual handling; rerun with --force to confirm",
 		},
-		"incomplete target falls back to generic wording": {
-			operation: "reset database",
-			config: spannerutil.Config{
-				Project:  "test-project",
-				Instance: "test-instance",
-			},
-			wantErr: "reset database is destructive for the configured database; rerun with --force to confirm",
-		},
 	}
 
 	for name, tt := range tests {

@@ -404,9 +404,6 @@ func requireDestructiveConfirmation(operation string, cfg spannerutil.Config, fo
 	}
 
 	target := cfg.DatabasePath()
-	if cfg.Project == "" || cfg.Instance == "" || cfg.Database == "" {
-		target = "the configured database"
-	}
 	if operation == "truncate database" {
 		return fmt.Errorf("%s is destructive for %s; truncation only respects interleave order, so foreign-key-only relationships may need manual handling; rerun with --force to confirm", operation, target)
 	}
