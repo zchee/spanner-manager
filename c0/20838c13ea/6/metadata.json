@@ -1,0 +1,42 @@
+{
+  "cli_version": "dev",
+  "checkpoint_id": "c020838c13ea",
+  "session_id": "019de96b-a334-7c02-b8c9-ca5dff4243eb",
+  "strategy": "manual-commit",
+  "created_at": "2026-05-02T16:29:32.991521Z",
+  "branch": "refactor",
+  "checkpoints_count": 0,
+  "files_touched": [
+    "cmd/db.go",
+    "cmd/db_test.go",
+    "cmd/progress.go",
+    "cmd/progress_test.go"
+  ],
+  "agent": "Codex",
+  "model": "gpt-5.5",
+  "turn_id": "7ae63fecc69d",
+  "checkpoint_transcript_start": 558,
+  "transcript_lines_at_start": 558,
+  "token_usage": {
+    "input_tokens": 813,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 191360,
+    "output_tokens": 274,
+    "api_call_count": 1
+  },
+  "session_metrics": {
+    "turn_count": 1
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-05-02T16:29:32.968063Z",
+    "agent_lines": 172,
+    "agent_removed": 33,
+    "human_added": 0,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 172,
+    "total_lines_changed": 205,
+    "agent_percentage": 100,
+    "metric_version": 2
+  }
+}
