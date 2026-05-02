@@ -1,0 +1,52 @@
+{
+  "cli_version": "dev",
+  "checkpoint_id": "c62522e46a70",
+  "session_id": "019de5fb-64e6-7291-a86f-f396afbdcc73",
+  "strategy": "manual-commit",
+  "created_at": "2026-05-02T02:46:25.355801Z",
+  "branch": "refactor",
+  "checkpoints_count": 0,
+  "files_touched": [
+    "codegen/config_test.go",
+    "codegen/naming_test.go",
+    "codegen/typeinfo_test.go"
+  ],
+  "agent": "Codex",
+  "model": "gpt-5.3-codex-spark",
+  "turn_id": "900018ea5c59",
+  "initial_attribution": {
+    "calculated_at": "2026-05-02T02:46:25.349499Z",
+    "agent_lines": 0,
+    "agent_removed": 0,
+    "human_added": 0,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 0,
+    "total_lines_changed": 0,
+    "agent_percentage": 0,
+    "metric_version": 2
+  },
+  "prompt_attributions": [
+    {
+      "checkpoint_number": 1,
+      "user_lines_added": 975,
+      "user_lines_removed": 0,
+      "agent_lines_added": 0,
+      "agent_lines_removed": 0,
+      "user_added_per_file": {
+        ".agent/PLANS.md": 243,
+        ".agents/plans/improve-codegen.md": 204,
+        ".envrc": 1,
+        ".omc/project-memory.json": 184,
+        ".omc/sessions/37eaa247-a76a-49bf-9ead-416b244fa606.json": 8,
+        ".omc/sessions/616b68d0-9d15-479c-a540-9e6fcb4193a2.json": 8,
+        ".omc/sessions/88b550f6-9671-4b51-b9cb-7aa11ae89b04.json": 8,
+        ".omc/sessions/a567c6d0-b3d0-46a4-88ec-7ba8cc07cfe4.json": 8,
+        ".omc/state/sessions/a567c6d0-b3d0-46a4-88ec-7ba8cc07cfe4/hud-state.json": 6,
+        "codegen/config_test.go": 168,
+        "codegen/naming_test.go": 22,
+        "codegen/typeinfo_test.go": 115
+      }
+    }
+  ]
+}
