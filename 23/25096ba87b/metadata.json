@@ -3,7 +3,7 @@
   "checkpoint_id": "2325096ba87b",
   "strategy": "manual-commit",
   "branch": "refactor",
-  "checkpoints_count": 2,
+  "checkpoints_count": 3,
   "files_touched": [
     "cmd/db.go",
     "cmd/db_test.go"
@@ -20,13 +20,19 @@
       "transcript": "/23/25096ba87b/1/full.jsonl",
       "content_hash": "/23/25096ba87b/1/content_hash.txt",
       "prompt": "/23/25096ba87b/1/prompt.txt"
+    },
+    {
+      "metadata": "/23/25096ba87b/2/metadata.json",
+      "transcript": "/23/25096ba87b/2/full.jsonl",
+      "content_hash": "/23/25096ba87b/2/content_hash.txt",
+      "prompt": "/23/25096ba87b/2/prompt.txt"
     }
   ],
   "token_usage": {
-    "input_tokens": 133760,
+    "input_tokens": 172508,
     "cache_creation_tokens": 0,
-    "cache_read_tokens": 3319040,
-    "output_tokens": 11447,
-    "api_call_count": 42
+    "cache_read_tokens": 3543936,
+    "output_tokens": 12700,
+    "api_call_count": 49
   }
 }

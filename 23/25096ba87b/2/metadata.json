@@ -1,0 +1,68 @@
+{
+  "cli_version": "dev",
+  "checkpoint_id": "2325096ba87b",
+  "session_id": "019deb01-0626-73b2-ae42-081aa0bdcbed",
+  "strategy": "manual-commit",
+  "created_at": "2026-05-02T23:29:34.69035Z",
+  "branch": "refactor",
+  "checkpoints_count": 1,
+  "files_touched": [
+    "cmd/db.go",
+    "cmd/db_test.go"
+  ],
+  "agent": "Codex",
+  "model": "gpt-5.5",
+  "turn_id": "47d2909fae49",
+  "token_usage": {
+    "input_tokens": 38748,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 224896,
+    "output_tokens": 1253,
+    "api_call_count": 7
+  },
+  "session_metrics": {
+    "turn_count": 1
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-05-02T23:29:34.685346Z",
+    "agent_lines": 0,
+    "agent_removed": 0,
+    "human_added": 0,
+    "human_modified": 0,
+    "human_removed": 1,
+    "total_committed": 0,
+    "total_lines_changed": 1,
+    "agent_percentage": 0,
+    "metric_version": 2
+  },
+  "prompt_attributions": [
+    {
+      "checkpoint_number": 1,
+      "user_lines_added": 769,
+      "user_lines_removed": 7,
+      "agent_lines_added": 0,
+      "agent_lines_removed": 0,
+      "user_added_per_file": {
+        ".agent/PLANS.md": 243,
+        ".agents/plans/improve-codegen.md": 204,
+        ".envrc": 1,
+        ".omc/project-memory.json": 197,
+        ".omc/sessions/37eaa247-a76a-49bf-9ead-416b244fa606.json": 8,
+        ".omc/sessions/616b68d0-9d15-479c-a540-9e6fcb4193a2.json": 8,
+        ".omc/sessions/88b550f6-9671-4b51-b9cb-7aa11ae89b04.json": 8,
+        ".omc/sessions/a567c6d0-b3d0-46a4-88ec-7ba8cc07cfe4.json": 8,
+        ".omc/sessions/e9df5353-7cc4-45d4-b01b-f6c26dd71f6e.json": 8,
+        ".omc/state/sessions/a567c6d0-b3d0-46a4-88ec-7ba8cc07cfe4/hud-state.json": 6,
+        "cmd/db.go": 5,
+        "cmd/db_test.go": 28,
+        "migration/executor.go": 12,
+        "migration/executor_test.go": 33
+      },
+      "user_removed_per_file": {
+        "cmd/db.go": 1,
+        "migration/executor.go": 2,
+        "migration/executor_test.go": 4
+      }
+    }
+  ]
+}
