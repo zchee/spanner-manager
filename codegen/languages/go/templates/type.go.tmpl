@@ -4,6 +4,9 @@ import (
 {{ end -}}
 )
 
+// {{ .Type.Table }}Table is the {{ .Type.Table }} table name.
+const {{ .Type.Table }}Table = "{{ .Type.Table }}"
+
 // {{ .Type.Name }} represents a row from '{{ .Type.Table }}'.
 type {{ .Type.Name }} struct {
 {{- range .Type.Fields }}
