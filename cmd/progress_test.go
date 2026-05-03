@@ -107,12 +107,13 @@ func TestRunWithProgressReturnsOperationError(t *testing.T) {
 	}
 }
 
-func TestRunWithProgressIgnoresRenderErrorsAfterOperationSucceeds(t *testing.T) {
+func TestRunWithProgressReturnsRenderErrorsAfterOperationSucceeds(t *testing.T) {
+	wantErr := errors.New("stderr closed")
 	var failWrites atomic.Bool
 	command := &cobra.Command{}
 	command.SetErr(&conditionalFailingWriter{
 		fail: &failWrites,
-		err:  errors.New("stderr closed"),
+		err:  wantErr,
 	})
 
 	runCalled := false
@@ -122,8 +123,8 @@ func TestRunWithProgressIgnoresRenderErrorsAfterOperationSucceeds(t *testing.T) 
 		time.Sleep(250 * time.Millisecond)
 		return nil
 	})
-	if err != nil {
-		t.Fatalf("runWithProgress() error = %v, want nil after operation success", err)
+	if !errors.Is(err, wantErr) {
+		t.Fatalf("runWithProgress() error = %v, want render error %v", err, wantErr)
 	}
 	if !runCalled {
 		t.Fatal("runWithProgress() did not run operation")

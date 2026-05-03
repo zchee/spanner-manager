@@ -63,10 +63,10 @@ func runWithProgress(cmd *cobra.Command, description string, run func() error) e
 
 	runErr := run()
 	close(stop)
-	<-progressErr
+	displayErr := <-progressErr
 	_ = bar.Finish()
 	if runErr != nil {
 		return runErr
 	}
-	return nil
+	return displayErr
 }
