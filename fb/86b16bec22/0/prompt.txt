@@ -1,0 +1,5 @@
+$oh-my-codex:autopilot $use-modern-go "Fix Gemini reviewed ponits: https://github.com/zchee/spanner-manager/pull/9#pullrequestreview-4215723738"
+
+---
+
+Fix https://github.com/zchee/spanner-manager/pull/9#discussion_r3177467632, use `text/scanner`
