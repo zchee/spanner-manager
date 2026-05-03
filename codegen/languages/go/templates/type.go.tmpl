@@ -135,7 +135,7 @@ func (t *{{ .Type.Name }}) Delete() *spanner.Mutation {
 }
 
 // Find{{ .Type.Name }}ByPrimaryKey finds a [{{ .Type.Name }}] by its primary key.
-func Find{{ .Type.Name }}ByPrimaryKey(ctx context.Context, db SpannerDB{{ range .Type.PrimaryKeyFields }}, {{ .Name | lowerFirst }} {{ .GoType }}{{ end }}) (*{{ .Type.Name }}, error) {
+func Find{{ .Type.Name }}ByPrimaryKey(ctx context.Context, db Reader{{ range .Type.PrimaryKeyFields }}, {{ .Name | lowerFirst }} {{ .GoType }}{{ end }}) (*{{ .Type.Name }}, error) {
 	key := spanner.Key{
 {{- range .Type.PrimaryKeyFields }}
 		{{ .Name | lowerFirst }},
@@ -159,7 +159,7 @@ func Find{{ .Type.Name }}ByPrimaryKey(ctx context.Context, db SpannerDB{{ range 
 }
 
 // Read{{ .Type.Name }} retrieves multiples rows from [{{ .Type.Name }}] by [spanner.KeySet] as a slice.
-func Read{{ .Type.Name }}(ctx context.Context, db SpannerDB, keys spanner.KeySet) ([]*{{ .Type.Name }}, error) {
+func Read{{ .Type.Name }}(ctx context.Context, db Reader, keys spanner.KeySet) ([]*{{ .Type.Name }}, error) {
 	var res []*{{ .Type.Name }}
 
 	cols := {{ .Type.Name}}Columns()

@@ -14,10 +14,15 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-// SpannerDB is the common interface for spanner operations.
-type SpannerDB interface {
+// Reader is the interface for spanner read operations.
+type Reader interface {
 	Read(ctx context.Context, table string, keys spanner.KeySet, columns []string) *spanner.RowIterator
 	ReadRow(ctx context.Context, table string, key spanner.Key, columns []string) (*spanner.Row, error)
+}
+
+// Writer is the interface for spanner write operations.
+type ReadWriter interface {
+	Reader
 	Query(ctx context.Context, statement spanner.Statement) *spanner.RowIterator
 }
 
