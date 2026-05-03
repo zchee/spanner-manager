@@ -7,6 +7,7 @@
   "files_touched": [
     "cmd/db.go",
     "cmd/db_test.go",
+    "codegen/languages/go/templates/spanner_db.go.tmpl",
     "codegen/languages/go/templates/type.go.tmpl"
   ],
   "sessions": [
