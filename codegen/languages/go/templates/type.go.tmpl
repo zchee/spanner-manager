@@ -146,13 +146,13 @@ func Find{{ .Type.Name }}ByPrimaryKey(ctx context.Context, db Reader{{ range .Ty
 
 	row, err := db.ReadRow(ctx, {{ .Type.Table }}Table, key, cols)
 	if err != nil {
-		return nil, newError("Find{{ .Type.Name }}", {{ .Type.Table }}Table, err)
+		return nil, newError("Find{{ .Type.Name }}ByPrimaryKey", {{ .Type.Table }}Table, err)
 	}
 
 	decoder := new{{ .Type.Name }}Decoder(cols)
 	t, err := decoder(row)
 	if err != nil {
-		return nil, newErrorWithCode(codes.Internal, "Find{{ .Type.Name }}", {{ .Type.Table }}Table, err)
+		return nil, newErrorWithCode(codes.Internal, "Find{{ .Type.Name }}ByPrimaryKey", {{ .Type.Table }}Table, err)
 	}
 
 	return t, nil
