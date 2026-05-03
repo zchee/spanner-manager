@@ -44,6 +44,12 @@
       "transcript": "/fb/86b16bec22/5/full.jsonl",
       "content_hash": "/fb/86b16bec22/5/content_hash.txt",
       "prompt": "/fb/86b16bec22/5/prompt.txt"
+    },
+    {
+      "metadata": "/fb/86b16bec22/6/metadata.json",
+      "transcript": "/fb/86b16bec22/6/full.jsonl",
+      "content_hash": "/fb/86b16bec22/6/content_hash.txt",
+      "prompt": ""
     }
   ],
   "token_usage": {
