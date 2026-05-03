@@ -1236,11 +1236,11 @@ import (
 )
 
 type fakeReadErrorDB struct {
-	iter *spanner.RowIterator
+	it *spanner.RowIterator
 }
 
 func (db fakeReadErrorDB) Read(ctx context.Context, table string, keys spanner.KeySet, columns []string) *spanner.RowIterator {
-	return db.iter
+	return db.it
 }
 
 func (db fakeReadErrorDB) ReadRow(ctx context.Context, table string, key spanner.Key, columns []string) (*spanner.Row, error) {
@@ -1251,20 +1251,20 @@ func (db fakeReadErrorDB) Query(ctx context.Context, statement spanner.Statement
 	panic("unexpected Query call")
 }
 
-func setRowIteratorField(t *testing.T, iter *spanner.RowIterator, field string, value any) {
+func setRowIteratorField(t *testing.T, it *spanner.RowIterator, field string, value any) {
 	t.Helper()
 
-	rv := reflect.ValueOf(iter).Elem().FieldByName(field)
+	rv := reflect.ValueOf(it).Elem().FieldByName(field)
 	if !rv.IsValid() {
 		t.Fatalf("field %q not found on RowIterator", field)
 	}
 	reflect.NewAt(rv.Type(), unsafe.Pointer(rv.UnsafeAddr())).Elem().Set(reflect.ValueOf(value))
 }
 
-func setRowIteratorPointerField(t *testing.T, iter *spanner.RowIterator, field string) {
+func setRowIteratorPointerField(t *testing.T, it *spanner.RowIterator, field string) {
 	t.Helper()
 
-	rv := reflect.ValueOf(iter).Elem().FieldByName(field)
+	rv := reflect.ValueOf(it).Elem().FieldByName(field)
 	if !rv.IsValid() {
 		t.Fatalf("field %q not found on RowIterator", field)
 	}
@@ -1273,11 +1273,11 @@ func setRowIteratorPointerField(t *testing.T, iter *spanner.RowIterator, field s
 }
 
 func TestReadRunsPreservesSpannerIteratorErrorCode(t *testing.T) {
-	iter := &spanner.RowIterator{}
-	setRowIteratorPointerField(t, iter, "meterTracerFactory")
-	setRowIteratorField(t, iter, "err", status.Error(codes.Unavailable, "read failed"))
+	it := &spanner.RowIterator{}
+	setRowIteratorPointerField(t, it, "meterTracerFactory")
+	setRowIteratorField(t, it, "err", status.Error(codes.Unavailable, "read failed"))
 
-	_, err := ReadRuns(t.Context(), fakeReadErrorDB{iter: iter}, spanner.AllKeys())
+	_, err := ReadRuns(t.Context(), fakeReadErrorDB{it: it}, spanner.AllKeys())
 	if err == nil {
 		t.Fatal("ReadRuns() error = nil, want non-nil")
 	}
@@ -1292,11 +1292,11 @@ func TestReadRunsWrapsDecoderFailuresAsInternal(t *testing.T) {
 		t.Fatalf("NewRow() error = %v", err)
 	}
 
-	iter := &spanner.RowIterator{}
-	setRowIteratorPointerField(t, iter, "meterTracerFactory")
-	setRowIteratorField(t, iter, "rows", []*spanner.Row{row})
+	it := &spanner.RowIterator{}
+	setRowIteratorPointerField(t, it, "meterTracerFactory")
+	setRowIteratorField(t, it, "rows", []*spanner.Row{row})
 
-	_, err = ReadRuns(t.Context(), fakeReadErrorDB{iter: iter}, spanner.AllKeys())
+	_, err = ReadRuns(t.Context(), fakeReadErrorDB{it: it}, spanner.AllKeys())
 	if err == nil {
 		t.Fatal("ReadRuns() error = nil, want non-nil")
 	}

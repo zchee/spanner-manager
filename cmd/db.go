@@ -287,12 +287,12 @@ func newDBTruncateCmd(flags *globalFlags) *cobra.Command {
 			}()
 
 			// Query table names and their parent relationships from INFORMATION_SCHEMA.
-			iter := client.Single().Query(ctx, spanner.Statement{
+			it := client.Single().Query(ctx, spanner.Statement{
 				SQL: truncateTablesSQL,
 			})
 
 			var tables []tableRelation
-			if err := iter.Do(func(row *spanner.Row) error {
+			if err := it.Do(func(row *spanner.Row) error {
 				var name, parent string
 				if err := row.Columns(&name, &parent); err != nil {
 					return err

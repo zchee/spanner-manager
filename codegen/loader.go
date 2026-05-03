@@ -64,10 +64,10 @@ func (s *InformationSchemaSource) Load(ctx context.Context) (*Schema, error) {
 }
 
 func (s *InformationSchemaSource) loadTables(ctx context.Context) ([]string, error) {
-	iter := s.client.Single().Query(ctx, loadTablesStatement())
+	it := s.client.Single().Query(ctx, loadTablesStatement())
 
 	var tables []string
-	if err := iter.Do(func(row *spanner.Row) error {
+	if err := it.Do(func(row *spanner.Row) error {
 		var name string
 		if err := row.Columns(&name); err != nil {
 			return err
@@ -101,7 +101,7 @@ func (s *InformationSchemaSource) loadType(ctx context.Context, tableName string
 	}
 
 	// Query columns.
-	iter := s.client.Single().Query(ctx, spanner.Statement{
+	it := s.client.Single().Query(ctx, spanner.Statement{
 		SQL: `SELECT COLUMN_NAME, SPANNER_TYPE, IS_NULLABLE, COLUMN_DEFAULT, GENERATION_EXPRESSION,
 			         ORDINAL_POSITION
 			  FROM INFORMATION_SCHEMA.COLUMNS
@@ -110,7 +110,7 @@ func (s *InformationSchemaSource) loadType(ctx context.Context, tableName string
 		Params: map[string]any{"table": tableName},
 	})
 
-	if err := iter.Do(func(row *spanner.Row) error {
+	if err := it.Do(func(row *spanner.Row) error {
 		var colName, spannerType, isNullable string
 		var columnDefault, generationExpression spanner.NullString
 		var ordinal int64
@@ -222,7 +222,7 @@ func applyPrimaryKeyOrder(t *Type, pkColumnNames []string) {
 }
 
 func (s *InformationSchemaSource) loadCommitTimestampColumns(ctx context.Context, tableName string) (map[string]bool, error) {
-	iter := s.client.Single().Query(ctx, spanner.Statement{
+	it := s.client.Single().Query(ctx, spanner.Statement{
 		SQL: `SELECT COLUMN_NAME, OPTION_VALUE
 			  FROM INFORMATION_SCHEMA.COLUMN_OPTIONS
 			  WHERE TABLE_SCHEMA = '' AND TABLE_NAME = @table
@@ -231,7 +231,7 @@ func (s *InformationSchemaSource) loadCommitTimestampColumns(ctx context.Context
 	})
 
 	columns := make(map[string]bool)
-	if err := iter.Do(func(row *spanner.Row) error {
+	if err := it.Do(func(row *spanner.Row) error {
 		var columnName, optionValue string
 		if err := row.Columns(&columnName, &optionValue); err != nil {
 			return err
