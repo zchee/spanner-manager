@@ -6,7 +6,8 @@
   "checkpoints_count": 1,
   "files_touched": [
     "cmd/db.go",
-    "cmd/db_test.go"
+    "cmd/db_test.go",
+    "codegen/languages/go/templates/type.go.tmpl"
   ],
   "sessions": [
     {
