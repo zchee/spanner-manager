@@ -38,15 +38,15 @@ func TestDestructiveDBCommandsRequireForce(t *testing.T) {
 		command *cobra.Command
 		want    string
 	}{
-		"drop": {
+		"error: drop command requires --force": {
 			command: newDBDropCmd(flags),
 			want:    "drop database is destructive for projects/test-project/instances/test-instance/databases/test-database; rerun with --force to confirm",
 		},
-		"reset": {
+		"error: reset command requires --force": {
 			command: newDBResetCmd(flags),
 			want:    "reset database is destructive for projects/test-project/instances/test-instance/databases/test-database; rerun with --force to confirm",
 		},
-		"truncate": {
+		"error: truncate command requires --force": {
 			command: newDBTruncateCmd(flags),
 			want:    "truncate database is destructive for projects/test-project/instances/test-instance/databases/test-database; truncation only respects interleave order, so foreign-key-only relationships may need manual handling; rerun with --force to confirm",
 		},
