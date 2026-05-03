@@ -460,7 +460,7 @@ func TestGenerator_Generate_CompositePrimaryKeyOrder(t *testing.T) {
 	}
 }`,
 		"find signature order": `func FindMembershipsByPrimaryKey(ctx context.Context, db Reader, b string, a int64) (*Memberships, error)`,
-		"delete key order":     `return spanner.Delete("Memberships", spanner.Key(t.values(MembershipsPrimaryKeys())))`,
+		"delete key order":     `return spanner.Delete(MembershipsTable, spanner.Key(t.values(MembershipsPrimaryKeys())))`,
 	}
 	for name, want := range tests {
 		t.Run(name, func(t *testing.T) {
@@ -551,9 +551,9 @@ func TestGenerator_Generate_WritableColumns(t *testing.T) {
 		"nickname",
 	}
 }`,
-		"insert uses writable columns": "func (t *Users) Insert() *spanner.Mutation {\n\twritableCols := UsersWritableColumns()\n\treturn spanner.Insert(\"Users\", writableCols, t.values(writableCols))\n}",
-		"update uses writable columns": "func (t *Users) Update() *spanner.Mutation {\n\twritableCols := UsersWritableColumns()\n\treturn spanner.Update(\"Users\", writableCols, t.values(writableCols))\n}",
-		"upsert uses writable columns": "func (t *Users) InsertOrUpdate() *spanner.Mutation {\n\twritableCols := UsersWritableColumns()\n\treturn spanner.InsertOrUpdate(\"Users\", writableCols, t.values(writableCols))\n}",
+		"insert uses writable columns": "func (t *Users) Insert() *spanner.Mutation {\n\twritableCols := UsersWritableColumns()\n\treturn spanner.Insert(UsersTable, writableCols, t.values(writableCols))\n}",
+		"update uses writable columns": "func (t *Users) Update() *spanner.Mutation {\n\twritableCols := UsersWritableColumns()\n\treturn spanner.Update(UsersTable, writableCols, t.values(writableCols))\n}",
+		"upsert uses writable columns": "func (t *Users) InsertOrUpdate() *spanner.Mutation {\n\twritableCols := UsersWritableColumns()\n\treturn spanner.InsertOrUpdate(UsersTable, writableCols, t.values(writableCols))\n}",
 	}
 
 	for name, want := range tests {

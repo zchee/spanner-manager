@@ -106,19 +106,19 @@ func (t *{{ .Type.Name }}) values(cols []string) []any {
 // Insert returns a [*spanner.Mutation] to insert a row into [{{ .Type.Table }}].
 func (t *{{ .Type.Name }}) Insert() *spanner.Mutation {
 	writableCols := {{ .Type.Name }}WritableColumns()
-	return spanner.Insert("{{ .Type.Table }}", writableCols, t.values(writableCols))
+	return spanner.Insert({{ .Type.Table }}Table, writableCols, t.values(writableCols))
 }
 
 // Update returns a [*spanner.Mutation] to update a row in [{{ .Type.Table }}].
 func (t *{{ .Type.Name }}) Update() *spanner.Mutation {
 	writableCols := {{ .Type.Name }}WritableColumns()
-	return spanner.Update("{{ .Type.Table }}", writableCols, t.values(writableCols))
+	return spanner.Update({{ .Type.Table }}Table, writableCols, t.values(writableCols))
 }
 
 // InsertOrUpdate returns a [*spanner.Mutation] to insert or update a row in [{{ .Type.Table }}].
 func (t *{{ .Type.Name }}) InsertOrUpdate() *spanner.Mutation {
 	writableCols := {{ .Type.Name }}WritableColumns()
-	return spanner.InsertOrUpdate("{{ .Type.Table }}", writableCols, t.values(writableCols))
+	return spanner.InsertOrUpdate({{ .Type.Table }}Table, writableCols, t.values(writableCols))
 }
 
 // Replace returns a [*spanner.Mutation] to insert a row into a table, deleting any
@@ -126,12 +126,12 @@ func (t *{{ .Type.Name }}) InsertOrUpdate() *spanner.Mutation {
 // written become NULL.
 func (t *{{ .Type.Name }}) Replace() *spanner.Mutation {
 	writableCols := {{ .Type.Name }}WritableColumns()
-	return spanner.Replace("{{ .Type.Table }}", writableCols, t.values(writableCols))
+	return spanner.Replace({{ .Type.Table }}Table, writableCols, t.values(writableCols))
 }
 
 // Delete returns a [*spanner.Mutation] to delete the [{{ .Type.Name }}] row.
 func (t *{{ .Type.Name }}) Delete() *spanner.Mutation {
-	return spanner.Delete("{{ .Type.Table }}", spanner.Key(t.values({{ .Type.Name }}PrimaryKeys())))
+	return spanner.Delete({{ .Type.Table }}Table, spanner.Key(t.values({{ .Type.Name }}PrimaryKeys())))
 }
 
 // Find{{ .Type.Name }}ByPrimaryKey finds a [{{ .Type.Name }}] by its primary key.
@@ -144,15 +144,15 @@ func Find{{ .Type.Name }}ByPrimaryKey(ctx context.Context, db Reader{{ range .Ty
 
 	cols := {{ .Type.Name}}Columns()
 
-	row, err := db.ReadRow(ctx, "{{ .Type.Table }}", key, cols)
+	row, err := db.ReadRow(ctx, {{ .Type.Table }}Table, key, cols)
 	if err != nil {
-		return nil, newError("Find{{ .Type.Name }}", "{{ .Type.Table }}", err)
+		return nil, newError("Find{{ .Type.Name }}", {{ .Type.Table }}Table, err)
 	}
 
 	decoder := new{{ .Type.Name }}Decoder(cols)
 	t, err := decoder(row)
 	if err != nil {
-		return nil, newErrorWithCode(codes.Internal, "Find{{ .Type.Name }}", "{{ .Type.Table }}", err)
+		return nil, newErrorWithCode(codes.Internal, "Find{{ .Type.Name }}", {{ .Type.Table }}Table, err)
 	}
 
 	return t, nil
@@ -165,7 +165,7 @@ func Read{{ .Type.Name }}(ctx context.Context, db Reader, keys spanner.KeySet) (
 	cols := {{ .Type.Name}}Columns()
 
 	decoder := new{{ .Type.Name }}Decoder(cols)
-	rows := db.Read(ctx, "{{ .Type.Table }}", keys, cols)
+	rows := db.Read(ctx, {{ .Type.Table }}Table, keys, cols)
 	err := rows.Do(func(row *spanner.Row) error {
 		val, err := decoder(row)
 		if err != nil {
@@ -176,7 +176,7 @@ func Read{{ .Type.Name }}(ctx context.Context, db Reader, keys spanner.KeySet) (
 		return nil
 	})
 	if err != nil {
-		return nil, newError("Read{{ .Type.Name }}", "{{ .Type.Table }}", err)
+		return nil, newError("Read{{ .Type.Name }}", {{ .Type.Table }}Table, err)
 	}
 
 	return res, nil
