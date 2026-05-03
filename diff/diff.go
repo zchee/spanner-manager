@@ -20,6 +20,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"text/scanner"
 
 	"github.com/cloudspannerecosystem/memefish/ast"
 
@@ -1597,136 +1598,172 @@ func changedOptions(from, to *ast.Options) *ast.Options {
 }
 
 func normalizeSQL(sql string) string {
-	var b strings.Builder
-	spacePending := false
-
-	runes := []rune(strings.TrimSpace(sql))
-	for i := 0; i < len(runes); i++ {
-		r := runes[i]
-
-		switch r {
-		case '-':
-			if i+1 < len(runes) && runes[i+1] == '-' {
-				i += 2
-				for i < len(runes) && runes[i] != '\n' && runes[i] != '\r' {
-					i++
-				}
-				i--
-				spacePending = b.Len() > 0
-				continue
-			}
-			if spacePending && b.Len() > 0 {
-				b.WriteByte(' ')
-				spacePending = false
-			}
-			b.WriteRune(r)
-		case '/':
-			if i+1 < len(runes) && runes[i+1] == '*' {
-				i += 2
-				for i+1 < len(runes) && !(runes[i] == '*' && runes[i+1] == '/') {
-					i++
-				}
-				if i+1 < len(runes) {
-					i++
-				}
-				spacePending = b.Len() > 0
-				continue
-			}
-			if spacePending && b.Len() > 0 {
-				b.WriteByte(' ')
-				spacePending = false
-			}
-			b.WriteRune(r)
-		case 'r', 'R':
-			if i+1 < len(runes) && (runes[i+1] == '\'' || runes[i+1] == '"') {
-				if spacePending && b.Len() > 0 {
-					b.WriteByte(' ')
-					spacePending = false
-				}
-				b.WriteRune(r)
-				i++
-				i = writeQuotedSQL(&b, runes, i, true)
-				continue
-			}
-			if spacePending && b.Len() > 0 {
-				b.WriteByte(' ')
-				spacePending = false
-			}
-			b.WriteRune(r)
-		case '\'', '"', rune(0x60):
-			if spacePending && b.Len() > 0 {
-				b.WriteByte(' ')
-				spacePending = false
-			}
-			i = writeQuotedSQL(&b, runes, i, false)
-		case ' ', '\t', '\n', '\r':
-			spacePending = b.Len() > 0
-		default:
-			if spacePending && b.Len() > 0 {
-				b.WriteByte(' ')
-				spacePending = false
-			}
-			b.WriteRune(r)
-		}
-	}
-
-	return strings.TrimSpace(b.String())
+	normalizer := newSQLNormalizer(sql)
+	return normalizer.normalize()
 }
 
-func writeQuotedSQL(b *strings.Builder, runes []rune, start int, raw bool) int {
-	quote := runes[start]
-	triple := quote != rune(0x60) &&
-		start+2 < len(runes) &&
-		runes[start+1] == quote &&
-		runes[start+2] == quote
+type sqlNormalizer struct {
+	scanner      scanner.Scanner
+	ch           rune
+	b            strings.Builder
+	spacePending bool
+}
 
-	b.WriteRune(quote)
-	if triple {
-		b.WriteRune(quote)
-		b.WriteRune(quote)
+func newSQLNormalizer(sql string) *sqlNormalizer {
+	normalizer := &sqlNormalizer{}
+	normalizer.scanner.Init(strings.NewReader(strings.TrimSpace(sql)))
+	normalizer.scanner.Mode = 0
+	normalizer.next()
+	return normalizer
+}
+
+func (n *sqlNormalizer) normalize() string {
+	for n.ch != scanner.EOF {
+		switch r := n.ch; r {
+		case '-':
+			if n.consumeLineComment() {
+				continue
+			}
+			n.writeRune(r)
+		case '/':
+			if n.consumeBlockComment() {
+				continue
+			}
+			n.writeRune(r)
+		case 'r', 'R':
+			if n.consumeRawQuotedSQL(r) {
+				continue
+			}
+			n.writeRune(r)
+		case '\'', '"', '`':
+			n.writeQuotedSQL(false)
+		case ' ', '\t', '\n', '\r':
+			n.consumeSpace()
+		default:
+			n.writeRune(r)
+		}
 	}
 
-	i := start
-	if triple {
-		i += 3
-	} else {
-		i++
+	return strings.TrimSpace(n.b.String())
+}
+
+func (n *sqlNormalizer) next() {
+	n.ch = n.scanner.Next()
+}
+
+func (n *sqlNormalizer) consumeSpace() {
+	for n.ch == ' ' || n.ch == '\t' || n.ch == '\n' || n.ch == '\r' {
+		n.next()
 	}
-	for i < len(runes) {
-		r := runes[i]
-		b.WriteRune(r)
+	n.spacePending = n.b.Len() > 0
+}
+
+func (n *sqlNormalizer) consumeLineComment() bool {
+	if n.scanner.Peek() != '-' {
+		return false
+	}
+	n.next()
+	n.next()
+	for n.ch != scanner.EOF && n.ch != '\n' && n.ch != '\r' {
+		n.next()
+	}
+	n.spacePending = n.b.Len() > 0
+	return true
+}
+
+func (n *sqlNormalizer) consumeBlockComment() bool {
+	if n.scanner.Peek() != '*' {
+		return false
+	}
+	n.next()
+	n.next()
+	for n.ch != scanner.EOF {
+		if n.ch == '*' && n.scanner.Peek() == '/' {
+			n.next()
+			n.next()
+			break
+		}
+		n.next()
+	}
+	n.spacePending = n.b.Len() > 0
+	return true
+}
+
+func (n *sqlNormalizer) consumeRawQuotedSQL(prefix rune) bool {
+	if n.scanner.Peek() != '\'' && n.scanner.Peek() != '"' {
+		return false
+	}
+	n.writeRune(prefix)
+	n.writeQuotedSQL(true)
+	return true
+}
+
+func (n *sqlNormalizer) writeRune(r rune) {
+	n.flushSpace()
+	n.b.WriteRune(r)
+	n.next()
+}
+
+func (n *sqlNormalizer) flushSpace() {
+	if n.spacePending && n.b.Len() > 0 {
+		n.b.WriteByte(' ')
+		n.spacePending = false
+	}
+}
+
+func (n *sqlNormalizer) writeQuotedSQL(raw bool) {
+	n.flushSpace()
+
+	quote := n.ch
+	n.b.WriteRune(quote)
+	n.next()
+
+	triple := quote != '`' && n.ch == quote && n.scanner.Peek() == quote
+	if triple {
+		n.b.WriteRune(n.ch)
+		n.next()
+		n.b.WriteRune(n.ch)
+		n.next()
+	}
+	for n.ch != scanner.EOF {
+		r := n.ch
+		n.b.WriteRune(r)
 
 		if triple {
-			if r == quote && i+2 < len(runes) && runes[i+1] == quote && runes[i+2] == quote {
-				i++
-				b.WriteRune(runes[i])
-				i++
-				b.WriteRune(runes[i])
-				return i
+			if r == quote && n.scanner.Peek() == quote {
+				n.next()
+				n.b.WriteRune(n.ch)
+				if n.scanner.Peek() == quote {
+					n.next()
+					n.b.WriteRune(n.ch)
+					n.next()
+					return
+				}
+				n.next()
+				return
 			}
-			i++
+			n.next()
 			continue
 		}
 
-		if !raw && quote != rune(0x60) && r == '\\' && i+1 < len(runes) {
-			i++
-			b.WriteRune(runes[i])
-			i++
+		if !raw && quote != '`' && r == '\\' && n.scanner.Peek() != scanner.EOF {
+			n.next()
+			n.b.WriteRune(n.ch)
+			n.next()
 			continue
 		}
-		if !raw && quote != rune(0x60) && r == quote && i+1 < len(runes) && runes[i+1] == quote {
-			i++
-			b.WriteRune(runes[i])
-			i++
+		if !raw && quote != '`' && r == quote && n.scanner.Peek() == quote {
+			n.next()
+			n.b.WriteRune(n.ch)
+			n.next()
 			continue
 		}
 		if r == quote {
-			return i
+			n.next()
+			return
 		}
-		i++
+		n.next()
 	}
-
-	return len(runes) - 1
 }
 
 func normalizeConstraintSQL(sql string) string {
