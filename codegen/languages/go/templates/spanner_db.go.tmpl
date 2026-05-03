@@ -20,10 +20,15 @@ type Reader interface {
 	ReadRow(ctx context.Context, table string, key spanner.Key, columns []string) (*spanner.Row, error)
 }
 
-// ReadWriter is the interface for spanner read and query operations.
+// Writer is the interface for spanner query operations.
+type Writer interface {
+	Query(ctx context.Context, statement spanner.Statement) *spanner.RowIterator
+}
+
+// ReadWriter is the interface for spanner read and write operations.
 type ReadWriter interface {
 	Reader
-	Query(ctx context.Context, statement spanner.Statement) *spanner.RowIterator
+	Writer
 }
 
 // SpannerLog provides an optional logger for generated code.
