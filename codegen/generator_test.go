@@ -931,8 +931,45 @@ func TestGenerator_Generate_FormattingErrorReturnsError(t *testing.T) {
 	if !strings.Contains(err.Error(), "formatting spanner_db.spanner.go") {
 		t.Fatalf("Generate() error = %v, want formatting context", err)
 	}
+	if !strings.Contains(err.Error(), "source snippet:") || !strings.Contains(err.Error(), "func definitelyBroken") {
+		t.Fatalf("Generate() error = %v, want unformatted source snippet", err)
+	}
 	if _, statErr := os.Stat(filepath.Join(outDir, "spanner_db.spanner.go")); !os.IsNotExist(statErr) {
 		t.Fatalf("generated file exists after formatter failure: stat error = %v", statErr)
+	}
+}
+
+func TestGeneratedSourceSnippet(t *testing.T) {
+	tests := map[string]struct {
+		src         []byte
+		want        string
+		notContains string
+	}{
+		"success: empty source is explicit": {
+			src:  nil,
+			want: "<empty>",
+		},
+		"success: includes useful source": {
+			src:  []byte("package models\n\nfunc broken( {\n"),
+			want: "func broken",
+		},
+		"success: truncates large source": {
+			src:         []byte(strings.Repeat("line\n", generatedSourceSnippetMaxLines+1)),
+			want:        "\n...",
+			notContains: strings.Repeat("line\n", generatedSourceSnippetMaxLines+1),
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			got := generatedSourceSnippet(tt.src)
+			if !strings.Contains(got, tt.want) {
+				t.Fatalf("generatedSourceSnippet() = %q, want substring %q", got, tt.want)
+			}
+			if tt.notContains != "" && strings.Contains(got, tt.notContains) {
+				t.Fatalf("generatedSourceSnippet() = %q, want not to contain %q", got, tt.notContains)
+			}
+		})
 	}
 }
 

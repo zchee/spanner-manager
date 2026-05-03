@@ -33,6 +33,9 @@ const (
 	headerTemplateName    = "header.go.tmpl"
 	spannerDBTemplateName = "spanner_db.go.tmpl"
 	typeTemplateName      = "type.go.tmpl"
+
+	generatedSourceSnippetMaxBytes = 4096
+	generatedSourceSnippetMaxLines = 20
 )
 
 //go:embed languages/go/templates/*.tmpl
@@ -626,7 +629,7 @@ func (g *Generator) formatGoSource(filename string, src []byte) ([]byte, error) 
 
 	formatted, err := processImportsWithLocalPrefix(generatedFile, src, modulePath)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("%w\nsource snippet:\n%s", err, generatedSourceSnippet(src))
 	}
 
 	formatted, err = gofumpt.Source(formatted, gofumpt.Options{
@@ -635,10 +638,33 @@ func (g *Generator) formatGoSource(filename string, src []byte) ([]byte, error) 
 		ExtraRules:  true,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("gofumpt: %w", err)
+		return nil, fmt.Errorf("gofumpt: %w\nsource snippet:\n%s", err, generatedSourceSnippet(formatted))
 	}
 
 	return formatted, nil
+}
+
+func generatedSourceSnippet(src []byte) string {
+	truncated := false
+	if len(src) > generatedSourceSnippetMaxBytes {
+		src = src[:generatedSourceSnippetMaxBytes]
+		truncated = true
+	}
+
+	lines := strings.Split(string(src), "\n")
+	if len(lines) > generatedSourceSnippetMaxLines {
+		lines = lines[:generatedSourceSnippetMaxLines]
+		truncated = true
+	}
+
+	snippet := strings.Join(lines, "\n")
+	if strings.TrimSpace(snippet) == "" {
+		snippet = "<empty>"
+	}
+	if truncated {
+		snippet += "\n..."
+	}
+	return snippet
 }
 
 func processImportsWithLocalPrefix(generatedFile string, src []byte, modulePath string) ([]byte, error) {
