@@ -1,0 +1,25 @@
+{
+  "cli_version": "dev",
+  "checkpoint_id": "6a8d89d5e9cf",
+  "strategy": "manual-commit",
+  "branch": "refactor",
+  "checkpoints_count": 1,
+  "files_touched": [
+    "diff/diff.go"
+  ],
+  "sessions": [
+    {
+      "metadata": "/6a/8d89d5e9cf/0/metadata.json",
+      "transcript": "/6a/8d89d5e9cf/0/full.jsonl",
+      "content_hash": "/6a/8d89d5e9cf/0/content_hash.txt",
+      "prompt": "/6a/8d89d5e9cf/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 336763,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 8271360,
+    "output_tokens": 23162,
+    "api_call_count": 62
+  }
+}
