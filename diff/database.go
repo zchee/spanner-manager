@@ -19,7 +19,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/cloudspannerecosystem/memefish/ast"
+	spanast "github.com/cloudspannerecosystem/memefish/ast"
 
 	"github.com/zchee/spanner-manager/sqlutil"
 )
@@ -42,15 +42,15 @@ type Database struct {
 	views                []*View
 	roles                []*Role
 	grants               []*Grant
-	alterDatabaseOptions *ast.AlterDatabase
-	options              *ast.Options
+	alterDatabaseOptions *spanast.AlterDatabase
+	options              *spanast.Options
 }
 
 // Table represents a Spanner table.
 type Table struct {
 	Name        string
 	Key         string
-	Path        *ast.Path
+	Path        *spanast.Path
 	Columns     []*Column
 	PrimaryKey  []*KeyColumn
 	ParentTable string
@@ -61,11 +61,11 @@ type Table struct {
 	Indexes           []*Index
 	SearchIndexes     []*SearchIndex
 	VectorIndexes     []*VectorIndex
-	Constraints       []*ast.TableConstraint
-	RowDeletionPolicy *ast.CreateRowDeletionPolicy
+	Constraints       []*spanast.TableConstraint
+	RowDeletionPolicy *spanast.CreateRowDeletionPolicy
 	ChangeStreams     []*ChangeStream
 
-	Raw      *ast.CreateTable
+	Raw      *spanast.CreateTable
 	children []*Table
 }
 
@@ -80,7 +80,7 @@ type Column struct {
 	Options       string
 	Hidden        bool
 
-	Raw *ast.ColumnDef
+	Raw *spanast.ColumnDef
 }
 
 // KeyColumn represents a column in a primary key or index.
@@ -103,7 +103,7 @@ type Index struct {
 	Interleaved  string
 	DDL          string
 
-	Raw *ast.CreateIndex
+	Raw *spanast.CreateIndex
 }
 
 // SearchIndex represents a search index.
@@ -115,7 +115,7 @@ type SearchIndex struct {
 	TokenColumns []string
 	DDL          string
 
-	Raw *ast.CreateSearchIndex
+	Raw *spanast.CreateSearchIndex
 }
 
 // ChangeStream represents a change stream.
@@ -124,7 +124,7 @@ type ChangeStream struct {
 	Key  string
 	DDL  string
 
-	Raw *ast.CreateChangeStream
+	Raw *spanast.CreateChangeStream
 }
 
 // Schema represents a named schema.
@@ -133,7 +133,7 @@ type Schema struct {
 	Key  string
 	DDL  string
 
-	Raw *ast.CreateSchema
+	Raw *spanast.CreateSchema
 }
 
 // Sequence represents a sequence object.
@@ -142,7 +142,7 @@ type Sequence struct {
 	Key  string
 	DDL  string
 
-	Raw *ast.CreateSequence
+	Raw *spanast.CreateSequence
 }
 
 // VectorIndex represents a vector index definition.
@@ -154,7 +154,7 @@ type VectorIndex struct {
 	ColumnName string
 	DDL        string
 
-	Raw *ast.CreateVectorIndex
+	Raw *spanast.CreateVectorIndex
 }
 
 // View represents a view definition.
@@ -163,7 +163,7 @@ type View struct {
 	Key  string
 	DDL  string
 
-	Raw *ast.CreateView
+	Raw *spanast.CreateView
 }
 
 // Role represents a role definition.
@@ -172,7 +172,7 @@ type Role struct {
 	Key  string
 	DDL  string
 
-	Raw *ast.CreateRole
+	Raw *spanast.CreateRole
 }
 
 // Grant represents a grant definition.
@@ -180,7 +180,7 @@ type Grant struct {
 	Key string
 	DDL string
 
-	Raw *ast.Grant
+	Raw *spanast.Grant
 }
 
 // ParseDatabase builds a Database from a list of raw DDL statement strings.
@@ -204,16 +204,16 @@ func ParseDatabase(ddlStrings []string) (*Database, error) {
 
 	for _, ddl := range ddls {
 		switch stmt := ddl.(type) {
-		case *ast.CreateSchema:
+		case *spanast.CreateSchema:
 			schema := parseCreateSchema(stmt)
 			db.Schemas[schema.Name] = schema
 			db.schemas = append(db.schemas, schema)
-		case *ast.CreateTable:
+		case *spanast.CreateTable:
 			table := parseCreateTable(stmt)
 			db.Tables[table.Name] = table
 			db.tables = append(db.tables, table)
 			db.tableByKey[table.Key] = table
-		case *ast.CreateIndex:
+		case *spanast.CreateIndex:
 			idx := parseCreateIndex(stmt)
 			db.Indexes[idx.Name] = idx
 			table, ok := db.tableByKey[idx.TableKey]
@@ -221,7 +221,7 @@ func ParseDatabase(ddlStrings []string) (*Database, error) {
 				return nil, fmt.Errorf("cannot find table for index %s", stmt.Name.SQL())
 			}
 			table.Indexes = append(table.Indexes, idx)
-		case *ast.CreateSearchIndex:
+		case *spanast.CreateSearchIndex:
 			idx := parseCreateSearchIndex(stmt)
 			db.SearchIndexes[idx.Name] = idx
 			table, ok := db.tableByKey[idx.TableKey]
@@ -229,7 +229,7 @@ func ParseDatabase(ddlStrings []string) (*Database, error) {
 				return nil, fmt.Errorf("cannot find table for search index %s", stmt.Name.SQL())
 			}
 			table.SearchIndexes = append(table.SearchIndexes, idx)
-		case *ast.CreateVectorIndex:
+		case *spanast.CreateVectorIndex:
 			idx := parseCreateVectorIndex(stmt)
 			db.VectorIndexes[idx.Name] = idx
 			table, ok := db.tableByKey[idx.TableKey]
@@ -237,29 +237,29 @@ func ParseDatabase(ddlStrings []string) (*Database, error) {
 				return nil, fmt.Errorf("cannot find table for vector index %s", stmt.Name.SQL())
 			}
 			table.VectorIndexes = append(table.VectorIndexes, idx)
-		case *ast.AlterTable:
+		case *spanast.AlterTable:
 			table, ok := db.tableByKey[comparablePath(stmt.Name)]
 			if !ok {
 				return nil, fmt.Errorf("cannot find table for alteration %s", stmt.Name.SQL())
 			}
 			switch alteration := stmt.TableAlteration.(type) {
-			case *ast.AddTableConstraint:
+			case *spanast.AddTableConstraint:
 				table.Constraints = append(table.Constraints, alteration.TableConstraint)
 			default:
 				return nil, fmt.Errorf("unsupported table alteration in ParseDatabase: %T", alteration)
 			}
-		case *ast.AlterDatabase:
+		case *spanast.AlterDatabase:
 			db.alterDatabaseOptions = stmt
 			db.options = stmt.Options
-		case *ast.CreateSequence:
+		case *spanast.CreateSequence:
 			sequence := parseCreateSequence(stmt)
 			db.Sequences[sequence.Name] = sequence
 			db.sequences = append(db.sequences, sequence)
-		case *ast.CreateChangeStream:
+		case *spanast.CreateChangeStream:
 			cs := parseCreateChangeStream(stmt)
 			db.ChangeStreams[cs.Name] = cs
 
-			if tables, ok := stmt.For.(*ast.ChangeStreamForTables); ok {
+			if tables, ok := stmt.For.(*spanast.ChangeStreamForTables); ok {
 				for _, watched := range tables.Tables {
 					table, exists := db.tableByKey[comparableIdent(watched.TableName)]
 					if !exists {
@@ -271,11 +271,11 @@ func ParseDatabase(ddlStrings []string) (*Database, error) {
 			}
 
 			db.globalChangeStreams = append(db.globalChangeStreams, cs)
-		case *ast.CreateView:
+		case *spanast.CreateView:
 			db.views = append(db.views, parseCreateView(stmt))
-		case *ast.CreateRole:
+		case *spanast.CreateRole:
 			db.roles = append(db.roles, parseCreateRole(stmt))
-		case *ast.Grant:
+		case *spanast.Grant:
 			db.grants = append(db.grants, parseGrant(stmt))
 		default:
 			return nil, fmt.Errorf("unsupported DDL statement in ParseDatabase: %T (%s)", stmt, stmt.SQL())
@@ -296,13 +296,13 @@ func ParseDatabase(ddlStrings []string) (*Database, error) {
 	return db, nil
 }
 
-func parseCreateTable(stmt *ast.CreateTable) *Table {
+func parseCreateTable(stmt *spanast.CreateTable) *Table {
 	table := &Table{
 		Name:              pathName(stmt.Name),
 		Key:               comparablePath(stmt.Name),
 		Path:              stmt.Name,
 		DDL:               stmt.SQL(),
-		Constraints:       append([]*ast.TableConstraint(nil), stmt.TableConstraints...),
+		Constraints:       append([]*spanast.TableConstraint(nil), stmt.TableConstraints...),
 		RowDeletionPolicy: stmt.RowDeletionPolicy,
 		Raw:               stmt,
 	}
@@ -318,9 +318,9 @@ func parseCreateTable(stmt *ast.CreateTable) *Table {
 		}
 
 		switch ds := col.DefaultSemantics.(type) {
-		case *ast.ColumnDefaultExpr:
+		case *spanast.ColumnDefaultExpr:
 			column.DefaultExpr = ds.Expr.SQL()
-		case *ast.GeneratedColumnExpr:
+		case *spanast.GeneratedColumnExpr:
 			column.GeneratedExpr = ds.Expr.SQL()
 		}
 		if col.Options != nil {
@@ -334,14 +334,14 @@ func parseCreateTable(stmt *ast.CreateTable) *Table {
 		table.PrimaryKey = append(table.PrimaryKey, &KeyColumn{
 			Name: key.Name.Name,
 			Key:  comparableIdent(key.Name),
-			Desc: key.Dir == ast.DirectionDesc,
+			Desc: key.Dir == spanast.DirectionDesc,
 		})
 	}
 
 	if stmt.Cluster != nil {
 		table.ParentTable = pathName(stmt.Cluster.TableName)
 		table.ParentKey = comparablePath(stmt.Cluster.TableName)
-		if stmt.Cluster.OnDelete == ast.OnDeleteCascade {
+		if stmt.Cluster.OnDelete == spanast.OnDeleteCascade {
 			table.OnDelete = "CASCADE"
 		} else {
 			table.OnDelete = "NO ACTION"
@@ -351,7 +351,7 @@ func parseCreateTable(stmt *ast.CreateTable) *Table {
 	return table
 }
 
-func parseCreateIndex(stmt *ast.CreateIndex) *Index {
+func parseCreateIndex(stmt *spanast.CreateIndex) *Index {
 	index := &Index{
 		Name:         pathName(stmt.Name),
 		Key:          comparableIdents(stmt.Name.Idents...),
@@ -367,7 +367,7 @@ func parseCreateIndex(stmt *ast.CreateIndex) *Index {
 		index.Columns = append(index.Columns, &KeyColumn{
 			Name: key.Name.Name,
 			Key:  comparableIdent(key.Name),
-			Desc: key.Dir == ast.DirectionDesc,
+			Desc: key.Dir == spanast.DirectionDesc,
 		})
 	}
 
@@ -384,7 +384,7 @@ func parseCreateIndex(stmt *ast.CreateIndex) *Index {
 	return index
 }
 
-func parseCreateSearchIndex(stmt *ast.CreateSearchIndex) *SearchIndex {
+func parseCreateSearchIndex(stmt *spanast.CreateSearchIndex) *SearchIndex {
 	index := &SearchIndex{
 		Name:      pathName(stmt.Name),
 		Key:       comparablePath(stmt.Name),
@@ -401,7 +401,7 @@ func parseCreateSearchIndex(stmt *ast.CreateSearchIndex) *SearchIndex {
 	return index
 }
 
-func parseCreateChangeStream(stmt *ast.CreateChangeStream) *ChangeStream {
+func parseCreateChangeStream(stmt *spanast.CreateChangeStream) *ChangeStream {
 	return &ChangeStream{
 		Name: stmt.Name.Name,
 		Key:  comparableIdent(stmt.Name),
@@ -410,7 +410,7 @@ func parseCreateChangeStream(stmt *ast.CreateChangeStream) *ChangeStream {
 	}
 }
 
-func parseCreateSchema(stmt *ast.CreateSchema) *Schema {
+func parseCreateSchema(stmt *spanast.CreateSchema) *Schema {
 	return &Schema{
 		Name: stmt.Name.Name,
 		Key:  comparableIdent(stmt.Name),
@@ -419,7 +419,7 @@ func parseCreateSchema(stmt *ast.CreateSchema) *Schema {
 	}
 }
 
-func parseCreateSequence(stmt *ast.CreateSequence) *Sequence {
+func parseCreateSequence(stmt *spanast.CreateSequence) *Sequence {
 	return &Sequence{
 		Name: pathName(stmt.Name),
 		Key:  comparablePath(stmt.Name),
@@ -428,7 +428,7 @@ func parseCreateSequence(stmt *ast.CreateSequence) *Sequence {
 	}
 }
 
-func parseCreateVectorIndex(stmt *ast.CreateVectorIndex) *VectorIndex {
+func parseCreateVectorIndex(stmt *spanast.CreateVectorIndex) *VectorIndex {
 	return &VectorIndex{
 		Name:       stmt.Name.Name,
 		Key:        comparableIdent(stmt.Name),
@@ -440,7 +440,7 @@ func parseCreateVectorIndex(stmt *ast.CreateVectorIndex) *VectorIndex {
 	}
 }
 
-func parseCreateView(stmt *ast.CreateView) *View {
+func parseCreateView(stmt *spanast.CreateView) *View {
 	return &View{
 		Name: pathName(stmt.Name),
 		Key:  comparablePath(stmt.Name),
@@ -449,7 +449,7 @@ func parseCreateView(stmt *ast.CreateView) *View {
 	}
 }
 
-func parseCreateRole(stmt *ast.CreateRole) *Role {
+func parseCreateRole(stmt *spanast.CreateRole) *Role {
 	return &Role{
 		Name: stmt.Name.Name,
 		Key:  comparableIdent(stmt.Name),
@@ -458,7 +458,7 @@ func parseCreateRole(stmt *ast.CreateRole) *Role {
 	}
 }
 
-func parseGrant(stmt *ast.Grant) *Grant {
+func parseGrant(stmt *spanast.Grant) *Grant {
 	return &Grant{
 		Key: grantKey(stmt),
 		DDL: stmt.SQL(),
@@ -467,21 +467,21 @@ func parseGrant(stmt *ast.Grant) *Grant {
 }
 
 // pathName extracts the simple name from a Path (last identifier).
-func pathName(p *ast.Path) string {
+func pathName(p *spanast.Path) string {
 	if p == nil || len(p.Idents) == 0 {
 		return ""
 	}
 	return p.Idents[len(p.Idents)-1].Name
 }
 
-func comparablePath(p *ast.Path) string {
+func comparablePath(p *spanast.Path) string {
 	if p == nil {
 		return ""
 	}
 	return comparableIdents(p.Idents...)
 }
 
-func comparableIdents(idents ...*ast.Ident) string {
+func comparableIdents(idents ...*spanast.Ident) string {
 	var parts []string
 	for _, ident := range idents {
 		if ident == nil {
@@ -492,7 +492,7 @@ func comparableIdents(idents ...*ast.Ident) string {
 	return strings.Join(parts, ".")
 }
 
-func comparableIdent(ident *ast.Ident) string {
+func comparableIdent(ident *spanast.Ident) string {
 	if ident == nil {
 		return ""
 	}
@@ -503,7 +503,7 @@ func comparableIdentName(name string) string {
 	return strings.ToLower(name)
 }
 
-func grantKey(stmt *ast.Grant) string {
+func grantKey(stmt *spanast.Grant) string {
 	if stmt == nil {
 		return ""
 	}
@@ -517,7 +517,7 @@ func (d *Database) grantsOnTable(table *Table) []*Grant {
 	}
 
 	for _, grant := range d.grants {
-		privilege, ok := grant.Raw.Privilege.(*ast.PrivilegeOnTable)
+		privilege, ok := grant.Raw.Privilege.(*spanast.PrivilegeOnTable)
 		if !ok {
 			continue
 		}
@@ -532,7 +532,7 @@ func (d *Database) grantsOnTable(table *Table) []*Grant {
 	return result
 }
 
-func (d *Database) grantsFromTablePath(path *ast.Path) []*Grant {
+func (d *Database) grantsFromTablePath(path *spanast.Path) []*Grant {
 	var result []*Grant
 	if path == nil {
 		return result
@@ -540,7 +540,7 @@ func (d *Database) grantsFromTablePath(path *ast.Path) []*Grant {
 
 	target := comparablePath(path)
 	for _, grant := range d.grants {
-		privilege, ok := grant.Raw.Privilege.(*ast.PrivilegeOnTable)
+		privilege, ok := grant.Raw.Privilege.(*spanast.PrivilegeOnTable)
 		if !ok {
 			continue
 		}
@@ -562,7 +562,7 @@ func (d *Database) grantsOnView(view *View) []*Grant {
 	}
 
 	for _, grant := range d.grants {
-		privilege, ok := grant.Raw.Privilege.(*ast.SelectPrivilegeOnView)
+		privilege, ok := grant.Raw.Privilege.(*spanast.SelectPrivilegeOnView)
 		if !ok {
 			continue
 		}
@@ -584,7 +584,7 @@ func (d *Database) grantsOnChangeStream(changeStream *ChangeStream) []*Grant {
 	}
 
 	for _, grant := range d.grants {
-		privilege, ok := grant.Raw.Privilege.(*ast.SelectPrivilegeOnChangeStream)
+		privilege, ok := grant.Raw.Privilege.(*spanast.SelectPrivilegeOnChangeStream)
 		if !ok {
 			continue
 		}
@@ -617,6 +617,6 @@ func (d *Database) grantsOnRole(role *Role) []*Grant {
 	return result
 }
 
-func isColumnHidden(col *ast.ColumnDef) bool {
+func isColumnHidden(col *spanast.ColumnDef) bool {
 	return !col.Hidden.Invalid() && col.Hidden != 0
 }

@@ -19,7 +19,7 @@ import (
 	"testing"
 
 	"cloud.google.com/go/spanner"
-	"github.com/cloudspannerecosystem/memefish/ast"
+	spanast "github.com/cloudspannerecosystem/memefish/ast"
 	gocmp "github.com/google/go-cmp/cmp"
 )
 
@@ -200,21 +200,21 @@ func TestRefreshTypeMetadata_PopulatesWritableFields(t *testing.T) {
 
 func TestFieldWriteSemanticsFromDefaultSemantics(t *testing.T) {
 	tests := map[string]struct {
-		semantics   ast.ColumnDefaultSemantics
+		semantics   spanast.ColumnDefaultSemantics
 		wantDefault bool
 		wantGen     bool
 	}{
 		"no semantics": {},
 		"default expr": {
-			semantics:   &ast.ColumnDefaultExpr{},
+			semantics:   &spanast.ColumnDefaultExpr{},
 			wantDefault: true,
 		},
 		"generated expr": {
-			semantics: &ast.GeneratedColumnExpr{},
+			semantics: &spanast.GeneratedColumnExpr{},
 			wantGen:   true,
 		},
 		"identity treated as default-managed": {
-			semantics:   &ast.IdentityColumn{},
+			semantics:   &spanast.IdentityColumn{},
 			wantDefault: true,
 		},
 	}
@@ -503,12 +503,12 @@ func TestGoTypeForSpannerTypeString(t *testing.T) {
 
 func TestGoTypeForSchemaType_UUIDCompat(t *testing.T) {
 	tests := map[string]struct {
-		schemaType ast.SchemaType
+		schemaType spanast.SchemaType
 		nullable   bool
 		want       goTypeInfo
 	}{
 		"named type compatibility": {
-			schemaType: &ast.NamedType{Path: []*ast.Ident{{Name: "UUID"}}},
+			schemaType: &spanast.NamedType{Path: []*spanast.Ident{{Name: "UUID"}}},
 			want: goTypeInfo{
 				Expr:            "uuid.UUID",
 				BaseSpannerType: "UUID",
@@ -516,7 +516,7 @@ func TestGoTypeForSchemaType_UUIDCompat(t *testing.T) {
 			},
 		},
 		"scalar type compatibility": {
-			schemaType: &ast.ScalarSchemaType{Name: ast.ScalarTypeName("UUID")},
+			schemaType: &spanast.ScalarSchemaType{Name: spanast.ScalarTypeName("UUID")},
 			nullable:   true,
 			want: goTypeInfo{
 				Expr:            "spanner.NullUUID",
@@ -524,7 +524,7 @@ func TestGoTypeForSchemaType_UUIDCompat(t *testing.T) {
 			},
 		},
 		"non uuid named type falls back to generic column value": {
-			schemaType: &ast.NamedType{Path: []*ast.Ident{
+			schemaType: &spanast.NamedType{Path: []*spanast.Ident{
 				{Name: "example"},
 				{Name: "Message"},
 			}},
@@ -534,7 +534,7 @@ func TestGoTypeForSchemaType_UUIDCompat(t *testing.T) {
 			},
 		},
 		"unknown nullable scalar falls back to generic column value": {
-			schemaType: &ast.ScalarSchemaType{Name: ast.ScalarTypeName("PROTO")},
+			schemaType: &spanast.ScalarSchemaType{Name: spanast.ScalarTypeName("PROTO")},
 			nullable:   true,
 			want: goTypeInfo{
 				Expr:            "spanner.GenericColumnValue",
@@ -542,7 +542,7 @@ func TestGoTypeForSchemaType_UUIDCompat(t *testing.T) {
 			},
 		},
 		"unknown non nullable scalar falls back to generic column value": {
-			schemaType: &ast.ScalarSchemaType{Name: ast.ScalarTypeName("PROTO")},
+			schemaType: &spanast.ScalarSchemaType{Name: spanast.ScalarTypeName("PROTO")},
 			want: goTypeInfo{
 				Expr:            "spanner.GenericColumnValue",
 				BaseSpannerType: "PROTO",
@@ -606,12 +606,12 @@ func TestImportSpecsFromConfig(t *testing.T) {
 
 func TestPathNameFromIdentPath(t *testing.T) {
 	tests := map[string]struct {
-		path []*ast.Ident
+		path []*spanast.Ident
 		want string
 	}{
 		"empty path": {},
 		"multi part path": {
-			path: []*ast.Ident{
+			path: []*spanast.Ident{
 				{Name: "example"},
 				{Name: "Message"},
 			},

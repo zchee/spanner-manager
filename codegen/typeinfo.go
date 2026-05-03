@@ -20,7 +20,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/cloudspannerecosystem/memefish/ast"
+	spanast "github.com/cloudspannerecosystem/memefish/ast"
 
 	"github.com/zchee/spanner-manager/sqlutil"
 )
@@ -53,7 +53,7 @@ func goTypeForSpannerTypeString(spannerType string, nullable bool) (goTypeInfo, 
 	return goTypeForSchemaType(schemaType, nullable), nil
 }
 
-func parseSchemaTypeString(spannerType string) (ast.SchemaType, error) {
+func parseSchemaTypeString(spannerType string) (spanast.SchemaType, error) {
 	ddl := fmt.Sprintf("CREATE TABLE T (C %s) PRIMARY KEY (C)", spannerType)
 
 	ddls, err := sqlutil.ParseDDLs(ddl)
@@ -64,7 +64,7 @@ func parseSchemaTypeString(spannerType string) (ast.SchemaType, error) {
 		return nil, fmt.Errorf("parsing schema type %q: unexpected DDL count %d", spannerType, len(ddls))
 	}
 
-	createTable, ok := ddls[0].(*ast.CreateTable)
+	createTable, ok := ddls[0].(*spanast.CreateTable)
 	if !ok || len(createTable.Columns) != 1 {
 		return nil, fmt.Errorf("parsing schema type %q: unexpected AST shape", spannerType)
 	}
@@ -72,9 +72,9 @@ func parseSchemaTypeString(spannerType string) (ast.SchemaType, error) {
 	return createTable.Columns[0].Type, nil
 }
 
-func goTypeForSchemaType(schemaType ast.SchemaType, nullable bool) goTypeInfo {
+func goTypeForSchemaType(schemaType spanast.SchemaType, nullable bool) goTypeInfo {
 	switch t := schemaType.(type) {
-	case *ast.ArraySchemaType:
+	case *spanast.ArraySchemaType:
 		item := goTypeForSchemaType(t.Item, false)
 		return goTypeInfo{
 			Expr:            "[]" + item.Expr,
@@ -82,11 +82,11 @@ func goTypeForSchemaType(schemaType ast.SchemaType, nullable bool) goTypeInfo {
 			IsArray:         true,
 			Imports:         item.Imports,
 		}
-	case *ast.ScalarSchemaType:
+	case *spanast.ScalarSchemaType:
 		return scalarGoType(t.Name, nullable)
-	case *ast.SizedSchemaType:
+	case *spanast.SizedSchemaType:
 		return scalarGoType(t.Name, nullable)
-	case *ast.NamedType:
+	case *spanast.NamedType:
 		if isUUIDNamedType(t) {
 			return uuidGoType(nullable)
 		}
@@ -102,7 +102,7 @@ func goTypeForSchemaType(schemaType ast.SchemaType, nullable bool) goTypeInfo {
 	}
 }
 
-func scalarGoType(name ast.ScalarTypeName, nullable bool) goTypeInfo {
+func scalarGoType(name spanast.ScalarTypeName, nullable bool) goTypeInfo {
 	base := strings.ToUpper(string(name))
 	if isUUIDScalarType(name) {
 		return uuidGoType(nullable)
@@ -110,25 +110,25 @@ func scalarGoType(name ast.ScalarTypeName, nullable bool) goTypeInfo {
 
 	if nullable {
 		switch name {
-		case ast.BoolTypeName:
+		case spanast.BoolTypeName:
 			return goTypeInfo{Expr: "spanner.NullBool", BaseSpannerType: base}
-		case ast.Int64TypeName:
+		case spanast.Int64TypeName:
 			return goTypeInfo{Expr: "spanner.NullInt64", BaseSpannerType: base}
-		case ast.Float32TypeName:
+		case spanast.Float32TypeName:
 			return goTypeInfo{Expr: "spanner.NullFloat32", BaseSpannerType: base}
-		case ast.Float64TypeName:
+		case spanast.Float64TypeName:
 			return goTypeInfo{Expr: "spanner.NullFloat64", BaseSpannerType: base}
-		case ast.StringTypeName:
+		case spanast.StringTypeName:
 			return goTypeInfo{Expr: "spanner.NullString", BaseSpannerType: base}
-		case ast.BytesTypeName:
+		case spanast.BytesTypeName:
 			return goTypeInfo{Expr: "[]byte", BaseSpannerType: base}
-		case ast.DateTypeName:
+		case spanast.DateTypeName:
 			return goTypeInfo{Expr: "spanner.NullDate", BaseSpannerType: base}
-		case ast.TimestampTypeName:
+		case spanast.TimestampTypeName:
 			return goTypeInfo{Expr: "spanner.NullTime", BaseSpannerType: base}
-		case ast.NumericTypeName:
+		case spanast.NumericTypeName:
 			return goTypeInfo{Expr: "spanner.NullNumeric", BaseSpannerType: base}
-		case ast.JSONTypeName:
+		case spanast.JSONTypeName:
 			return goTypeInfo{Expr: "spanner.NullJSON", BaseSpannerType: base}
 		default:
 			return goTypeInfo{Expr: "spanner.GenericColumnValue", BaseSpannerType: base}
@@ -136,48 +136,48 @@ func scalarGoType(name ast.ScalarTypeName, nullable bool) goTypeInfo {
 	}
 
 	switch name {
-	case ast.BoolTypeName:
+	case spanast.BoolTypeName:
 		return goTypeInfo{Expr: "bool", BaseSpannerType: base}
-	case ast.Int64TypeName:
+	case spanast.Int64TypeName:
 		return goTypeInfo{Expr: "int64", BaseSpannerType: base}
-	case ast.Float32TypeName:
+	case spanast.Float32TypeName:
 		return goTypeInfo{Expr: "float32", BaseSpannerType: base}
-	case ast.Float64TypeName:
+	case spanast.Float64TypeName:
 		return goTypeInfo{Expr: "float64", BaseSpannerType: base}
-	case ast.StringTypeName:
+	case spanast.StringTypeName:
 		return goTypeInfo{Expr: "string", BaseSpannerType: base}
-	case ast.BytesTypeName:
+	case spanast.BytesTypeName:
 		return goTypeInfo{Expr: "[]byte", BaseSpannerType: base}
-	case ast.DateTypeName:
+	case spanast.DateTypeName:
 		return goTypeInfo{
 			Expr:            "civil.Date",
 			BaseSpannerType: base,
 			Imports:         []ImportSpec{{Path: "cloud.google.com/go/civil"}},
 		}
-	case ast.TimestampTypeName:
+	case spanast.TimestampTypeName:
 		return goTypeInfo{
 			Expr:            "time.Time",
 			BaseSpannerType: base,
 			Imports:         []ImportSpec{{Path: "time"}},
 		}
-	case ast.NumericTypeName:
+	case spanast.NumericTypeName:
 		return goTypeInfo{
 			Expr:            "big.Rat",
 			BaseSpannerType: base,
 			Imports:         []ImportSpec{{Path: "math/big"}},
 		}
-	case ast.JSONTypeName:
+	case spanast.JSONTypeName:
 		return goTypeInfo{Expr: "spanner.NullJSON", BaseSpannerType: base}
 	default:
 		return goTypeInfo{Expr: "spanner.GenericColumnValue", BaseSpannerType: base}
 	}
 }
 
-func isUUIDScalarType(name ast.ScalarTypeName) bool {
+func isUUIDScalarType(name spanast.ScalarTypeName) bool {
 	return strings.EqualFold(string(name), spannerUUIDTypeName)
 }
 
-func isUUIDNamedType(t *ast.NamedType) bool {
+func isUUIDNamedType(t *spanast.NamedType) bool {
 	if t == nil || len(t.Path) != 1 {
 		return false
 	}
@@ -288,7 +288,7 @@ func dedupeImportSpecs(imports []ImportSpec) []ImportSpec {
 	return out
 }
 
-func pathNameFromIdentPath(path []*ast.Ident) string {
+func pathNameFromIdentPath(path []*spanast.Ident) string {
 	if len(path) == 0 {
 		return ""
 	}

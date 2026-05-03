@@ -18,7 +18,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/cloudspannerecosystem/memefish/ast"
+	spanast "github.com/cloudspannerecosystem/memefish/ast"
 	gocmp "github.com/google/go-cmp/cmp"
 
 	"github.com/zchee/spanner-manager/sqlutil"
@@ -1803,20 +1803,20 @@ func TestDiff_CoverageBranches(t *testing.T) {
 func TestDiff_HelperCoverage(t *testing.T) {
 	t.Run("defaultByScalarTypeName", func(t *testing.T) {
 		tests := []struct {
-			name ast.ScalarTypeName
+			name spanast.ScalarTypeName
 			want string
 		}{
-			{ast.BoolTypeName, "FALSE"},
-			{ast.Int64TypeName, "0"},
-			{ast.Float64TypeName, "0"},
-			{ast.StringTypeName, `""`},
-			{ast.BytesTypeName, `b""`},
-			{ast.DateTypeName, `DATE "0001-01-01"`},
-			{ast.TimestampTypeName, `TIMESTAMP "0001-01-01T00:00:00Z"`},
-			{ast.NumericTypeName, `NUMERIC "0"`},
-			{ast.JSONTypeName, `JSON "{}"`},
-			{ast.TokenListTypeName, `b""`},
-			{ast.ScalarTypeName("UUID"), `NEW_UUID()`},
+			{spanast.BoolTypeName, "FALSE"},
+			{spanast.Int64TypeName, "0"},
+			{spanast.Float64TypeName, "0"},
+			{spanast.StringTypeName, `""`},
+			{spanast.BytesTypeName, `b""`},
+			{spanast.DateTypeName, `DATE "0001-01-01"`},
+			{spanast.TimestampTypeName, `TIMESTAMP "0001-01-01T00:00:00Z"`},
+			{spanast.NumericTypeName, `NUMERIC "0"`},
+			{spanast.JSONTypeName, `JSON "{}"`},
+			{spanast.TokenListTypeName, `b""`},
+			{spanast.ScalarTypeName("UUID"), `NEW_UUID()`},
 		}
 
 		for _, tt := range tests {
@@ -1933,7 +1933,7 @@ func TestDiff_HelperCoverage(t *testing.T) {
 			t.Fatalf("normalizeOnDelete(\"\") = %q", got)
 		}
 
-		if got := normalizeDirection(""); got != ast.DirectionAsc {
+		if got := normalizeDirection(""); got != spanast.DirectionAsc {
 			t.Fatalf("normalizeDirection(\"\") = %q", got)
 		}
 
@@ -1942,10 +1942,10 @@ func TestDiff_HelperCoverage(t *testing.T) {
 		}
 
 		tsDefault := updateDML{
-			Table: &ast.Path{Idents: []*ast.Ident{{Name: "t1"}}},
-			Def: &ast.ColumnDef{
-				Name: &ast.Ident{Name: "ts"},
-				Type: &ast.ScalarSchemaType{Name: ast.TimestampTypeName},
+			Table: &spanast.Path{Idents: []*spanast.Ident{{Name: "t1"}}},
+			Def: &spanast.ColumnDef{
+				Name: &spanast.Ident{Name: "ts"},
+				Type: &spanast.ScalarSchemaType{Name: spanast.TimestampTypeName},
 			},
 		}
 		if got := tsDefault.defaultValue().SQL(); got != `TIMESTAMP "0001-01-01T00:00:00Z"` {
@@ -1953,10 +1953,10 @@ func TestDiff_HelperCoverage(t *testing.T) {
 		}
 
 		arrayDefault := updateDML{
-			Table: &ast.Path{Idents: []*ast.Ident{{Name: "t1"}}},
-			Def: &ast.ColumnDef{
-				Name: &ast.Ident{Name: "tags"},
-				Type: &ast.ArraySchemaType{Item: &ast.SizedSchemaType{Name: ast.StringTypeName, Max: true}},
+			Table: &spanast.Path{Idents: []*spanast.Ident{{Name: "t1"}}},
+			Def: &spanast.ColumnDef{
+				Name: &spanast.Ident{Name: "tags"},
+				Type: &spanast.ArraySchemaType{Item: &spanast.SizedSchemaType{Name: spanast.StringTypeName, Max: true}},
 			},
 		}
 		if got := arrayDefault.defaultValue().SQL(); got != "ARRAY[]" {
@@ -2048,9 +2048,9 @@ CREATE TABLE c (
 			t.Fatalf("isDroppedIndex() = false, want true")
 		}
 
-		arrayCol := &ast.ColumnDef{
-			Name:    &ast.Ident{Name: "tags"},
-			Type:    &ast.ArraySchemaType{Item: &ast.SizedSchemaType{Name: ast.StringTypeName, Max: true}},
+		arrayCol := &spanast.ColumnDef{
+			Name:    &spanast.Ident{Name: "tags"},
+			Type:    &spanast.ArraySchemaType{Item: &spanast.SizedSchemaType{Name: spanast.StringTypeName, Max: true}},
 			NotNull: true,
 		}
 		if got := g.setDefaultSemantics(arrayCol).DefaultSemantics.SQL(); got != "DEFAULT (ARRAY[])" {
@@ -2125,18 +2125,18 @@ CREATE SEARCH INDEX sidx ON t1(name) STORING (id);
 
 	t.Run("privilege helpers", func(t *testing.T) {
 		db := mustParseDatabaseFromString(t, `CREATE ROLE role1; GRANT SELECT(col1), INSERT(col2), UPDATE(col3), DELETE ON TABLE T1 TO ROLE role1;`)
-		privilege := db.grants[0].Raw.Privilege.(*ast.PrivilegeOnTable)
+		privilege := db.grants[0].Raw.Privilege.(*spanast.PrivilegeOnTable)
 
-		if !hasPrivilegeOnColumn(privilege, &ast.Ident{Name: "col1"}) {
+		if !hasPrivilegeOnColumn(privilege, &spanast.Ident{Name: "col1"}) {
 			t.Fatalf("hasPrivilegeOnColumn(select) = false, want true")
 		}
-		if !hasPrivilegeOnColumn(privilege, &ast.Ident{Name: "col2"}) {
+		if !hasPrivilegeOnColumn(privilege, &spanast.Ident{Name: "col2"}) {
 			t.Fatalf("hasPrivilegeOnColumn(insert) = false, want true")
 		}
-		if !hasPrivilegeOnColumn(privilege, &ast.Ident{Name: "col3"}) {
+		if !hasPrivilegeOnColumn(privilege, &spanast.Ident{Name: "col3"}) {
 			t.Fatalf("hasPrivilegeOnColumn(update) = false, want true")
 		}
-		if hasPrivilegeOnColumn(privilege, &ast.Ident{Name: "missing"}) {
+		if hasPrivilegeOnColumn(privilege, &spanast.Ident{Name: "missing"}) {
 			t.Fatalf("hasPrivilegeOnColumn(missing) = true, want false")
 		}
 	})

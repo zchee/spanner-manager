@@ -21,7 +21,7 @@ import (
 	"strings"
 
 	"cloud.google.com/go/spanner"
-	"github.com/cloudspannerecosystem/memefish/ast"
+	spanast "github.com/cloudspannerecosystem/memefish/ast"
 
 	"github.com/zchee/spanner-manager/spannerutil"
 	"github.com/zchee/spanner-manager/sqlutil"
@@ -269,7 +269,7 @@ func (s *DDLFileSource) Load(_ context.Context) (*Schema, error) {
 
 	schema := &Schema{}
 	for _, ddl := range ddls {
-		ct, ok := ddl.(*ast.CreateTable)
+		ct, ok := ddl.(*spanast.CreateTable)
 		if !ok {
 			continue
 		}
@@ -320,14 +320,14 @@ func (s *DDLFileSource) Load(_ context.Context) (*Schema, error) {
 }
 
 // pathName extracts the simple name from a memefish Path (last identifier).
-func pathName(p *ast.Path) string {
+func pathName(p *spanast.Path) string {
 	if p == nil || len(p.Idents) == 0 {
 		return ""
 	}
 	return p.Idents[len(p.Idents)-1].Name
 }
 
-func columnHasTrueOption(options *ast.Options, name string) bool {
+func columnHasTrueOption(options *spanast.Options, name string) bool {
 	if options == nil {
 		return false
 	}
@@ -335,17 +335,17 @@ func columnHasTrueOption(options *ast.Options, name string) bool {
 		if record.Name.Name != name {
 			continue
 		}
-		lit, ok := record.Value.(*ast.BoolLiteral)
+		lit, ok := record.Value.(*spanast.BoolLiteral)
 		return ok && lit.Value
 	}
 	return false
 }
 
-func fieldWriteSemanticsFromDefaultSemantics(semantics ast.ColumnDefaultSemantics) (hasDefault, isGenerated bool) {
+func fieldWriteSemanticsFromDefaultSemantics(semantics spanast.ColumnDefaultSemantics) (hasDefault, isGenerated bool) {
 	switch semantics.(type) {
 	case nil:
 		return false, false
-	case *ast.GeneratedColumnExpr:
+	case *spanast.GeneratedColumnExpr:
 		return false, true
 	default:
 		return true, false

@@ -22,7 +22,7 @@ import (
 	"sync"
 	"text/scanner"
 
-	"github.com/cloudspannerecosystem/memefish/ast"
+	spanast "github.com/cloudspannerecosystem/memefish/ast"
 
 	"github.com/zchee/spanner-manager/sqlutil"
 )
@@ -33,7 +33,7 @@ type Statement struct {
 	SQL  string
 }
 
-var defaultUUIDExprOnce = sync.OnceValues(func() (ast.Expr, error) {
+var defaultUUIDExprOnce = sync.OnceValues(func() (spanast.Expr, error) {
 	return sqlutil.ParseExpr("NEW_UUID()")
 })
 
@@ -75,8 +75,8 @@ type generator struct {
 }
 
 type alterColumnDDL struct {
-	Table      *ast.Path
-	Def        *ast.ColumnDef
+	Table      *spanast.Path
+	Def        *spanast.ColumnDef
 	SetOptions bool
 }
 
@@ -86,7 +86,7 @@ func (a alterColumnDDL) SQL() string {
 	if a.SetOptions {
 		allowCommitTimestamp := false
 		if v := optionValueByName(a.Def.Options, "allow_commit_timestamp"); v != nil {
-			if lit, ok := v.(*ast.BoolLiteral); ok {
+			if lit, ok := v.(*spanast.BoolLiteral); ok {
 				allowCommitTimestamp = lit.Value
 			}
 		}
@@ -111,31 +111,31 @@ func (a alterColumnDDL) SQL() string {
 }
 
 type updateDML struct {
-	Table *ast.Path
-	Def   *ast.ColumnDef
+	Table *spanast.Path
+	Def   *spanast.ColumnDef
 }
 
-func (u updateDML) defaultValue() ast.Expr {
+func (u updateDML) defaultValue() spanast.Expr {
 	if defaultSemantics := u.Def.DefaultSemantics; defaultSemantics != nil {
-		if expr, ok := defaultSemantics.(*ast.ColumnDefaultExpr); ok {
+		if expr, ok := defaultSemantics.(*spanast.ColumnDefaultExpr); ok {
 			return expr.Expr
 		}
 	}
 
 	switch t := u.Def.Type.(type) {
-	case *ast.ArraySchemaType:
-		return &ast.ArrayLiteral{}
-	case *ast.ScalarSchemaType:
+	case *spanast.ArraySchemaType:
+		return &spanast.ArrayLiteral{}
+	case *spanast.ScalarSchemaType:
 		return defaultByScalarTypeName(t.Name)
-	case *ast.SizedSchemaType:
+	case *spanast.SizedSchemaType:
 		return defaultByScalarTypeName(t.Name)
-	case *ast.NamedType:
+	case *spanast.NamedType:
 		if isUUIDNamedType(t) {
 			return uuidDefaultExpr()
 		}
-		return &ast.StringLiteral{Value: ""}
+		return &spanast.StringLiteral{Value: ""}
 	default:
-		return &ast.StringLiteral{Value: ""}
+		return &spanast.StringLiteral{Value: ""}
 	}
 }
 
@@ -247,12 +247,12 @@ func (g *generator) generate() []Statement {
 
 	for _, fromSequence := range g.from.sequences {
 		if _, exists := g.findSequenceByKey(g.to.sequences, fromSequence.Key); !exists {
-			stmts = append(stmts, ddlStatement(&ast.DropSequence{Name: fromSequence.Raw.Name}))
+			stmts = append(stmts, ddlStatement(&spanast.DropSequence{Name: fromSequence.Raw.Name}))
 		}
 	}
 	for _, fromSchema := range g.from.schemas {
 		if _, exists := g.findSchemaByKey(g.to.schemas, fromSchema.Key); !exists {
-			stmts = append(stmts, ddlStatement(&ast.DropSchema{Name: fromSchema.Raw.Name}))
+			stmts = append(stmts, ddlStatement(&spanast.DropSchema{Name: fromSchema.Raw.Name}))
 		}
 	}
 
@@ -355,12 +355,12 @@ func (g *generator) generateAlterDatabaseOptions() []Statement {
 		if g.from.alterDatabaseOptions == nil {
 			return nil
 		}
-		stmt := &ast.AlterDatabase{
+		stmt := &spanast.AlterDatabase{
 			Name: g.from.alterDatabaseOptions.Name,
-			Options: &ast.Options{Records: []*ast.OptionsDef{
-				{Name: &ast.Ident{Name: "optimizer_version"}, Value: &ast.NullLiteral{}},
-				{Name: &ast.Ident{Name: "version_retention_period"}, Value: &ast.NullLiteral{}},
-				{Name: &ast.Ident{Name: "enable_key_visualizer"}, Value: &ast.NullLiteral{}},
+			Options: &spanast.Options{Records: []*spanast.OptionsDef{
+				{Name: &spanast.Ident{Name: "optimizer_version"}, Value: &spanast.NullLiteral{}},
+				{Name: &spanast.Ident{Name: "version_retention_period"}, Value: &spanast.NullLiteral{}},
+				{Name: &spanast.Ident{Name: "enable_key_visualizer"}, Value: &spanast.NullLiteral{}},
 			}},
 		}
 		return []Statement{ddlStatement(stmt)}
@@ -372,14 +372,14 @@ func (g *generator) generateAlterDatabaseOptions() []Statement {
 			if optionValueByName(options, record.Name.Name) != nil {
 				continue
 			}
-			options.Records = append(options.Records, &ast.OptionsDef{
-				Name:  &ast.Ident{Name: record.Name.Name},
-				Value: &ast.NullLiteral{},
+			options.Records = append(options.Records, &spanast.OptionsDef{
+				Name:  &spanast.Ident{Name: record.Name.Name},
+				Value: &spanast.NullLiteral{},
 			})
 		}
 	}
 
-	stmt := &ast.AlterDatabase{
+	stmt := &spanast.AlterDatabase{
 		Name:    g.to.alterDatabaseOptions.Name,
 		Options: options,
 	}
@@ -414,23 +414,23 @@ func (g *generator) generateDropConstraintsIndexesAndTable(table *Table) []State
 		stmts = append(stmts, g.generateDropConstraintsIndexesAndTable(child)...)
 	}
 	for _, index := range table.Indexes {
-		stmts = append(stmts, ddlStatement(&ast.DropIndex{Name: index.Raw.Name}))
+		stmts = append(stmts, ddlStatement(&spanast.DropIndex{Name: index.Raw.Name}))
 		g.droppedIndexByKey[index.Key] = struct{}{}
 	}
 	for _, index := range table.SearchIndexes {
-		stmts = append(stmts, ddlStatement(&ast.DropSearchIndex{Name: index.Raw.Name}))
+		stmts = append(stmts, ddlStatement(&spanast.DropSearchIndex{Name: index.Raw.Name}))
 		g.droppedIndexByKey[index.Key] = struct{}{}
 	}
 	for _, index := range table.VectorIndexes {
-		stmts = append(stmts, ddlStatement(&ast.DropVectorIndex{Name: index.Raw.Name}))
+		stmts = append(stmts, ddlStatement(&spanast.DropVectorIndex{Name: index.Raw.Name}))
 		g.droppedIndexByKey[index.Key] = struct{}{}
 	}
 	for _, changeStream := range table.ChangeStreams {
 		if g.isDroppedChangeStream(changeStream.Key) {
 			continue
 		}
-		if tables, ok := changeStream.Raw.For.(*ast.ChangeStreamForTables); ok && len(tables.Tables) > 1 {
-			var remaining []*ast.ChangeStreamForTable
+		if tables, ok := changeStream.Raw.For.(*spanast.ChangeStreamForTables); ok && len(tables.Tables) > 1 {
+			var remaining []*spanast.ChangeStreamForTable
 			for _, watched := range tables.Tables {
 				if comparableIdent(watched.TableName) == table.Key {
 					continue
@@ -450,18 +450,18 @@ func (g *generator) generateDropConstraintsIndexesAndTable(table *Table) []State
 						Name: changeStream.Name,
 						Key:  changeStream.Key,
 						DDL:  changeStream.DDL,
-						Raw: &ast.CreateChangeStream{
+						Raw: &spanast.CreateChangeStream{
 							Name:    changeStream.Raw.Name,
-							For:     &ast.ChangeStreamForTables{Tables: remaining},
+							For:     &spanast.ChangeStreamForTables{Tables: remaining},
 							Options: changeStream.Raw.Options,
 						},
 					}
 					g.alteredChangeStreamByKey[changeStream.Key] = altered
 					if _, willAlter := g.willCreateOrAlterStreams[changeStream.Key]; !willAlter && changeStreamType(toChangeStream.Raw) == changeStreamTypeTables {
-						stmts = append(stmts, ddlStatement(&ast.AlterChangeStream{
+						stmts = append(stmts, ddlStatement(&spanast.AlterChangeStream{
 							Name: changeStream.Raw.Name,
-							ChangeStreamAlteration: &ast.ChangeStreamSetFor{
-								For: &ast.ChangeStreamForTables{Tables: remaining},
+							ChangeStreamAlteration: &spanast.ChangeStreamSetFor{
+								For: &spanast.ChangeStreamForTables{Tables: remaining},
 							},
 						}))
 					}
@@ -477,8 +477,8 @@ func (g *generator) generateDropConstraintsIndexesAndTable(table *Table) []State
 		stmts = append(stmts, g.generateDropChangeStream(changeStream)...)
 	}
 
-	stmts = append(stmts, g.generateDropNamedConstraintsMatching(func(_ *Table, constraint *ast.TableConstraint) bool {
-		fk, ok := constraint.Constraint.(*ast.ForeignKey)
+	stmts = append(stmts, g.generateDropNamedConstraintsMatching(func(_ *Table, constraint *spanast.TableConstraint) bool {
+		fk, ok := constraint.Constraint.(*spanast.ForeignKey)
 		if !ok {
 			return false
 		}
@@ -492,7 +492,7 @@ func (g *generator) generateDropConstraintsIndexesAndTable(table *Table) []State
 		g.droppedGrants = append(g.droppedGrants, grant)
 	}
 
-	stmts = append(stmts, ddlStatement(&ast.DropTable{Name: table.Raw.Name}))
+	stmts = append(stmts, ddlStatement(&spanast.DropTable{Name: table.Raw.Name}))
 	g.droppedTableByKey[table.Key] = struct{}{}
 
 	return stmts
@@ -504,9 +504,9 @@ func (g *generator) generateConstraintDiffs(from, to *Table) []Statement {
 	for _, toConstraint := range to.Constraints {
 		if toConstraint.Name == nil {
 			if _, exists := g.findUnnamedConstraint(from.Constraints, toConstraint); !exists {
-				stmts = append(stmts, ddlStatement(&ast.AlterTable{
+				stmts = append(stmts, ddlStatement(&spanast.AlterTable{
 					Name:            to.Raw.Name,
-					TableAlteration: &ast.AddTableConstraint{TableConstraint: toConstraint},
+					TableAlteration: &spanast.AddTableConstraint{TableConstraint: toConstraint},
 				}))
 			}
 			continue
@@ -514,9 +514,9 @@ func (g *generator) generateConstraintDiffs(from, to *Table) []Statement {
 
 		fromConstraint, exists := g.findNamedConstraint(from.Constraints, comparableIdent(toConstraint.Name))
 		if !exists || g.isDroppedConstraint(toConstraint) {
-			stmts = append(stmts, ddlStatement(&ast.AlterTable{
+			stmts = append(stmts, ddlStatement(&spanast.AlterTable{
 				Name:            to.Raw.Name,
-				TableAlteration: &ast.AddTableConstraint{TableConstraint: toConstraint},
+				TableAlteration: &spanast.AddTableConstraint{TableConstraint: toConstraint},
 			}))
 			continue
 		}
@@ -524,9 +524,9 @@ func (g *generator) generateConstraintDiffs(from, to *Table) []Statement {
 			continue
 		}
 		stmts = append(stmts, g.generateDropNamedConstraint(from.Raw.Name, fromConstraint)...)
-		stmts = append(stmts, ddlStatement(&ast.AlterTable{
+		stmts = append(stmts, ddlStatement(&spanast.AlterTable{
 			Name:            to.Raw.Name,
-			TableAlteration: &ast.AddTableConstraint{TableConstraint: toConstraint},
+			TableAlteration: &spanast.AddTableConstraint{TableConstraint: toConstraint},
 		}))
 	}
 
@@ -548,21 +548,21 @@ func (g *generator) generateRowDeletionPolicyDiffs(from, to *Table) []Statement 
 		if g.rowDeletionPolicyEqual(from.RowDeletionPolicy, to.RowDeletionPolicy) {
 			return nil
 		}
-		return []Statement{ddlStatement(&ast.AlterTable{
+		return []Statement{ddlStatement(&spanast.AlterTable{
 			Name: to.Raw.Name,
-			TableAlteration: &ast.ReplaceRowDeletionPolicy{
+			TableAlteration: &spanast.ReplaceRowDeletionPolicy{
 				RowDeletionPolicy: to.RowDeletionPolicy.RowDeletionPolicy,
 			},
 		})}
 	case from.RowDeletionPolicy != nil && to.RowDeletionPolicy == nil:
-		return []Statement{ddlStatement(&ast.AlterTable{
+		return []Statement{ddlStatement(&spanast.AlterTable{
 			Name:            to.Raw.Name,
-			TableAlteration: &ast.DropRowDeletionPolicy{},
+			TableAlteration: &spanast.DropRowDeletionPolicy{},
 		})}
 	case from.RowDeletionPolicy == nil && to.RowDeletionPolicy != nil:
-		return []Statement{ddlStatement(&ast.AlterTable{
+		return []Statement{ddlStatement(&spanast.AlterTable{
 			Name: to.Raw.Name,
-			TableAlteration: &ast.AddRowDeletionPolicy{
+			TableAlteration: &spanast.AddRowDeletionPolicy{
 				RowDeletionPolicy: to.RowDeletionPolicy.RowDeletionPolicy,
 			},
 		})}
@@ -578,21 +578,21 @@ func (g *generator) generateColumnDiffs(from, to *Table) []Statement {
 		fromCol, exists := g.findColumnDefByKey(from.Raw.Columns, comparableIdent(toCol.Name))
 		if !exists {
 			if toCol.NotNull && toCol.DefaultSemantics == nil {
-				stmts = append(stmts, ddlStatement(&ast.AlterTable{
+				stmts = append(stmts, ddlStatement(&spanast.AlterTable{
 					Name:            to.Raw.Name,
-					TableAlteration: &ast.AddColumn{Column: g.setDefaultSemantics(toCol)},
+					TableAlteration: &spanast.AddColumn{Column: g.setDefaultSemantics(toCol)},
 				}))
-				stmts = append(stmts, ddlStatement(&ast.AlterTable{
+				stmts = append(stmts, ddlStatement(&spanast.AlterTable{
 					Name: to.Raw.Name,
-					TableAlteration: &ast.AlterColumn{
+					TableAlteration: &spanast.AlterColumn{
 						Name:       toCol.Name,
-						Alteration: &ast.AlterColumnDropDefault{},
+						Alteration: &spanast.AlterColumnDropDefault{},
 					},
 				}))
 			} else {
-				stmts = append(stmts, ddlStatement(&ast.AlterTable{
+				stmts = append(stmts, ddlStatement(&spanast.AlterTable{
 					Name:            to.Raw.Name,
-					TableAlteration: &ast.AddColumn{Column: toCol},
+					TableAlteration: &spanast.AddColumn{Column: toCol},
 				}))
 			}
 			continue
@@ -606,18 +606,18 @@ func (g *generator) generateColumnDiffs(from, to *Table) []Statement {
 			continue
 		}
 
-		requiresDropAndCreateDefault := func(defaultSemantics ast.ColumnDefaultSemantics) bool {
+		requiresDropAndCreateDefault := func(defaultSemantics spanast.ColumnDefaultSemantics) bool {
 			if defaultSemantics == nil {
 				return false
 			}
-			_, ok := defaultSemantics.(*ast.ColumnDefaultExpr)
+			_, ok := defaultSemantics.(*spanast.ColumnDefaultExpr)
 			return !ok
 		}
 
 		if g.columnTypeEqual(fromCol, toCol) &&
 			!requiresDropAndCreateDefault(fromCol.DefaultSemantics) &&
 			!requiresDropAndCreateDefault(toCol.DefaultSemantics) {
-			if scalar, ok := fromCol.Type.(*ast.ScalarSchemaType); ok && scalar.Name == ast.TimestampTypeName {
+			if scalar, ok := fromCol.Type.(*spanast.ScalarSchemaType); ok && scalar.Name == spanast.TimestampTypeName {
 				if fromCol.NotNull != toCol.NotNull || !g.columnDefaultExprEqual(fromCol.DefaultSemantics, toCol.DefaultSemantics) {
 					if !fromCol.NotNull && toCol.NotNull {
 						stmts = append(stmts, dmlStatement(updateDML{Table: to.Raw.Name, Def: toCol}))
@@ -656,10 +656,10 @@ func (g *generator) generateColumnDiffs(from, to *Table) []Statement {
 	return stmts
 }
 
-func (g *generator) generateDropColumn(table *ast.Path, column *ast.Ident) []Statement {
+func (g *generator) generateDropColumn(table *spanast.Path, column *spanast.Ident) []Statement {
 	var stmts []Statement
-	stmts = append(stmts, g.generateDropNamedConstraintsMatching(func(owner *Table, constraint *ast.TableConstraint) bool {
-		fk, ok := constraint.Constraint.(*ast.ForeignKey)
+	stmts = append(stmts, g.generateDropNamedConstraintsMatching(func(owner *Table, constraint *spanast.TableConstraint) bool {
+		fk, ok := constraint.Constraint.(*spanast.ForeignKey)
 		if !ok {
 			return false
 		}
@@ -681,7 +681,7 @@ func (g *generator) generateDropColumn(table *ast.Path, column *ast.Ident) []Sta
 	})...)
 
 	for _, grant := range g.from.grantsFromTablePath(table) {
-		privilege, ok := grant.Raw.Privilege.(*ast.PrivilegeOnTable)
+		privilege, ok := grant.Raw.Privilege.(*spanast.PrivilegeOnTable)
 		if !ok {
 			continue
 		}
@@ -694,9 +694,9 @@ func (g *generator) generateDropColumn(table *ast.Path, column *ast.Ident) []Sta
 		g.droppedGrants = append(g.droppedGrants, grant)
 	}
 
-	stmts = append(stmts, ddlStatement(&ast.AlterTable{
+	stmts = append(stmts, ddlStatement(&spanast.AlterTable{
 		Name:            table,
-		TableAlteration: &ast.DropColumn{Name: column},
+		TableAlteration: &spanast.DropColumn{Name: column},
 	}))
 	return stmts
 }
@@ -707,13 +707,13 @@ func (g *generator) generateDropIndexes(from, to *Table) []Statement {
 	for _, toIndex := range to.Indexes {
 		fromIndex, exists := g.findIndexByKey(from.Indexes, toIndex.Key)
 		if exists && !g.indexEqualIgnoringStoring(fromIndex.Raw, toIndex.Raw) {
-			stmts = append(stmts, ddlStatement(&ast.DropIndex{Name: fromIndex.Raw.Name}))
+			stmts = append(stmts, ddlStatement(&spanast.DropIndex{Name: fromIndex.Raw.Name}))
 			g.droppedIndexByKey[fromIndex.Key] = struct{}{}
 		}
 	}
 	for _, fromIndex := range from.Indexes {
 		if _, exists := g.findIndexByKey(to.Indexes, fromIndex.Key); !exists {
-			stmts = append(stmts, ddlStatement(&ast.DropIndex{Name: fromIndex.Raw.Name}))
+			stmts = append(stmts, ddlStatement(&spanast.DropIndex{Name: fromIndex.Raw.Name}))
 			g.droppedIndexByKey[fromIndex.Key] = struct{}{}
 		}
 	}
@@ -721,26 +721,26 @@ func (g *generator) generateDropIndexes(from, to *Table) []Statement {
 	for _, toIndex := range to.SearchIndexes {
 		fromIndex, exists := g.findSearchIndexByKey(from.SearchIndexes, toIndex.Key)
 		if exists && !g.searchIndexEqual(fromIndex.Raw, toIndex.Raw) {
-			stmts = append(stmts, ddlStatement(&ast.DropSearchIndex{Name: fromIndex.Raw.Name}))
+			stmts = append(stmts, ddlStatement(&spanast.DropSearchIndex{Name: fromIndex.Raw.Name}))
 			g.droppedIndexByKey[fromIndex.Key] = struct{}{}
 		}
 	}
 	for _, fromIndex := range from.SearchIndexes {
 		if _, exists := g.findSearchIndexByKey(to.SearchIndexes, fromIndex.Key); !exists {
-			stmts = append(stmts, ddlStatement(&ast.DropSearchIndex{Name: fromIndex.Raw.Name}))
+			stmts = append(stmts, ddlStatement(&spanast.DropSearchIndex{Name: fromIndex.Raw.Name}))
 			g.droppedIndexByKey[fromIndex.Key] = struct{}{}
 		}
 	}
 	for _, toIndex := range to.VectorIndexes {
 		fromIndex, exists := g.findVectorIndexByKey(from.VectorIndexes, toIndex.Key)
 		if exists && normalizeSQL(fromIndex.Raw.SQL()) != normalizeSQL(toIndex.Raw.SQL()) {
-			stmts = append(stmts, ddlStatement(&ast.DropVectorIndex{Name: fromIndex.Raw.Name}))
+			stmts = append(stmts, ddlStatement(&spanast.DropVectorIndex{Name: fromIndex.Raw.Name}))
 			g.droppedIndexByKey[fromIndex.Key] = struct{}{}
 		}
 	}
 	for _, fromIndex := range from.VectorIndexes {
 		if _, exists := g.findVectorIndexByKey(to.VectorIndexes, fromIndex.Key); !exists {
-			stmts = append(stmts, ddlStatement(&ast.DropVectorIndex{Name: fromIndex.Raw.Name}))
+			stmts = append(stmts, ddlStatement(&spanast.DropVectorIndex{Name: fromIndex.Raw.Name}))
 			g.droppedIndexByKey[fromIndex.Key] = struct{}{}
 		}
 	}
@@ -788,9 +788,9 @@ func (g *generator) generateAlterIndexes(from, to *Table) []Statement {
 					continue
 				}
 			}
-			stmts = append(stmts, ddlStatement(&ast.AlterIndex{
+			stmts = append(stmts, ddlStatement(&spanast.AlterIndex{
 				Name: toIndex.Raw.Name,
-				IndexAlteration: &ast.AddStoredColumn{
+				IndexAlteration: &spanast.AddStoredColumn{
 					Name: storing,
 				},
 			}))
@@ -811,9 +811,9 @@ func (g *generator) generateAlterIndexes(from, to *Table) []Statement {
 					continue
 				}
 			}
-			stmts = append(stmts, ddlStatement(&ast.AlterIndex{
+			stmts = append(stmts, ddlStatement(&spanast.AlterIndex{
 				Name: toIndex.Raw.Name,
-				IndexAlteration: &ast.DropStoredColumn{
+				IndexAlteration: &spanast.DropStoredColumn{
 					Name: storing,
 				},
 			}))
@@ -830,7 +830,7 @@ func (g *generator) generateCreateChangeStreamsForTable(table *Table) []Statemen
 	return nil
 }
 
-func (g *generator) generateDropNamedConstraint(table *ast.Path, constraint *ast.TableConstraint) []Statement {
+func (g *generator) generateDropNamedConstraint(table *spanast.Path, constraint *spanast.TableConstraint) []Statement {
 	if constraint.Name == nil {
 		return nil
 	}
@@ -839,13 +839,13 @@ func (g *generator) generateDropNamedConstraint(table *ast.Path, constraint *ast
 		return nil
 	}
 	g.droppedConstraintBySQL[key] = struct{}{}
-	return []Statement{ddlStatement(&ast.AlterTable{
+	return []Statement{ddlStatement(&spanast.AlterTable{
 		Name:            table,
-		TableAlteration: &ast.DropConstraint{Name: constraint.Name},
+		TableAlteration: &spanast.DropConstraint{Name: constraint.Name},
 	})}
 }
 
-func (g *generator) generateDropNamedConstraintsMatching(predicate func(*Table, *ast.TableConstraint) bool) []Statement {
+func (g *generator) generateDropNamedConstraintsMatching(predicate func(*Table, *spanast.TableConstraint) bool) []Statement {
 	var stmts []Statement
 	for _, table := range g.from.tables {
 		for _, constraint := range table.Constraints {
@@ -862,63 +862,63 @@ func (g *generator) generateAlterChangeStream(from, to *ChangeStream) []Statemen
 
 	switch {
 	case changeStreamType(from.Raw) == changeStreamTypeAll && changeStreamType(to.Raw) == changeStreamTypeTables:
-		stmts = append(stmts, ddlStatement(&ast.AlterChangeStream{
+		stmts = append(stmts, ddlStatement(&spanast.AlterChangeStream{
 			Name:                   to.Raw.Name,
-			ChangeStreamAlteration: &ast.ChangeStreamSetFor{For: to.Raw.For},
+			ChangeStreamAlteration: &spanast.ChangeStreamSetFor{For: to.Raw.For},
 		}))
 	case changeStreamType(from.Raw) == changeStreamTypeAll && changeStreamType(to.Raw) == changeStreamTypeNone:
-		stmts = append(stmts, ddlStatement(&ast.AlterChangeStream{
+		stmts = append(stmts, ddlStatement(&spanast.AlterChangeStream{
 			Name:                   to.Raw.Name,
-			ChangeStreamAlteration: &ast.ChangeStreamDropForAll{},
+			ChangeStreamAlteration: &spanast.ChangeStreamDropForAll{},
 		}))
 	case changeStreamType(from.Raw) == changeStreamTypeTables && changeStreamType(to.Raw) == changeStreamTypeAll:
-		stmts = append(stmts, ddlStatement(&ast.AlterChangeStream{
+		stmts = append(stmts, ddlStatement(&spanast.AlterChangeStream{
 			Name:                   to.Raw.Name,
-			ChangeStreamAlteration: &ast.ChangeStreamSetFor{For: to.Raw.For},
+			ChangeStreamAlteration: &spanast.ChangeStreamSetFor{For: to.Raw.For},
 		}))
 	case changeStreamType(from.Raw) == changeStreamTypeTables && changeStreamType(to.Raw) == changeStreamTypeNone:
-		stmts = append(stmts, ddlStatement(&ast.AlterChangeStream{
+		stmts = append(stmts, ddlStatement(&spanast.AlterChangeStream{
 			Name:                   to.Raw.Name,
-			ChangeStreamAlteration: &ast.ChangeStreamDropForAll{},
+			ChangeStreamAlteration: &spanast.ChangeStreamDropForAll{},
 		}))
 	case changeStreamType(from.Raw) == changeStreamTypeTables && changeStreamType(to.Raw) == changeStreamTypeTables:
 		if !g.changeStreamForEqual(from.Raw.For, to.Raw.For) {
-			stmts = append(stmts, ddlStatement(&ast.AlterChangeStream{
+			stmts = append(stmts, ddlStatement(&spanast.AlterChangeStream{
 				Name:                   to.Raw.Name,
-				ChangeStreamAlteration: &ast.ChangeStreamSetFor{For: to.Raw.For},
+				ChangeStreamAlteration: &spanast.ChangeStreamSetFor{For: to.Raw.For},
 			}))
 		}
 	case changeStreamType(from.Raw) == changeStreamTypeNone && changeStreamType(to.Raw) == changeStreamTypeAll:
-		stmts = append(stmts, ddlStatement(&ast.AlterChangeStream{
+		stmts = append(stmts, ddlStatement(&spanast.AlterChangeStream{
 			Name:                   to.Raw.Name,
-			ChangeStreamAlteration: &ast.ChangeStreamSetFor{For: to.Raw.For},
+			ChangeStreamAlteration: &spanast.ChangeStreamSetFor{For: to.Raw.For},
 		}))
 	case changeStreamType(from.Raw) == changeStreamTypeNone && changeStreamType(to.Raw) == changeStreamTypeTables:
-		stmts = append(stmts, ddlStatement(&ast.AlterChangeStream{
+		stmts = append(stmts, ddlStatement(&spanast.AlterChangeStream{
 			Name:                   to.Raw.Name,
-			ChangeStreamAlteration: &ast.ChangeStreamSetFor{For: to.Raw.For},
+			ChangeStreamAlteration: &spanast.ChangeStreamSetFor{For: to.Raw.For},
 		}))
 	}
 
 	if !g.optionsEqual(from.Raw.Options, to.Raw.Options) {
 		options := cloneOptions(to.Raw.Options)
 		if options == nil {
-			options = &ast.Options{}
+			options = &spanast.Options{}
 		}
 		if from.Raw.Options != nil {
 			for _, record := range from.Raw.Options.Records {
 				if optionValueByName(to.Raw.Options, record.Name.Name) != nil {
 					continue
 				}
-				options.Records = append(options.Records, &ast.OptionsDef{
-					Name:  &ast.Ident{Name: record.Name.Name},
-					Value: &ast.NullLiteral{},
+				options.Records = append(options.Records, &spanast.OptionsDef{
+					Name:  &spanast.Ident{Name: record.Name.Name},
+					Value: &spanast.NullLiteral{},
 				})
 			}
 		}
-		stmts = append(stmts, ddlStatement(&ast.AlterChangeStream{
+		stmts = append(stmts, ddlStatement(&spanast.AlterChangeStream{
 			Name:                   to.Raw.Name,
-			ChangeStreamAlteration: &ast.ChangeStreamSetOptions{Options: options},
+			ChangeStreamAlteration: &spanast.ChangeStreamSetOptions{Options: options},
 		}))
 	}
 
@@ -936,7 +936,7 @@ func (g *generator) generateDropChangeStream(changeStream *ChangeStream) []State
 		g.droppedGrants = append(g.droppedGrants, grant)
 	}
 	g.droppedChangeStreamByKey[changeStream.Key] = struct{}{}
-	return []Statement{ddlStatement(&ast.DropChangeStream{Name: changeStream.Raw.Name})}
+	return []Statement{ddlStatement(&spanast.DropChangeStream{Name: changeStream.Raw.Name})}
 }
 
 func (g *generator) isDroppedTable(key string) bool {
@@ -949,7 +949,7 @@ func (g *generator) isDroppedIndex(key string) bool {
 	return exists
 }
 
-func (g *generator) isDroppedConstraint(constraint *ast.TableConstraint) bool {
+func (g *generator) isDroppedConstraint(constraint *spanast.TableConstraint) bool {
 	_, exists := g.droppedConstraintBySQL[constraint.SQL()]
 	return exists
 }
@@ -1002,7 +1002,7 @@ func (g *generator) primaryKeyEqual(x, y *Table) bool {
 	return true
 }
 
-func (g *generator) columnDefEqual(x, y *ast.ColumnDef) bool {
+func (g *generator) columnDefEqual(x, y *spanast.ColumnDef) bool {
 	return strings.EqualFold(comparableIdent(x.Name), comparableIdent(y.Name)) &&
 		x.Type.SQL() == y.Type.SQL() &&
 		x.NotNull == y.NotNull &&
@@ -1011,11 +1011,11 @@ func (g *generator) columnDefEqual(x, y *ast.ColumnDef) bool {
 		isColumnHidden(x) == isColumnHidden(y)
 }
 
-func (g *generator) columnTypeEqual(x, y *ast.ColumnDef) bool {
+func (g *generator) columnTypeEqual(x, y *spanast.ColumnDef) bool {
 	return x.Type.SQL() == y.Type.SQL()
 }
 
-func (g *generator) columnTypeWideningOnly(x, y *ast.ColumnDef) bool {
+func (g *generator) columnTypeWideningOnly(x, y *spanast.ColumnDef) bool {
 	if !strings.EqualFold(comparableIdent(x.Name), comparableIdent(y.Name)) ||
 		x.NotNull != y.NotNull ||
 		columnDefaultSemanticsSQL(x.DefaultSemantics) != columnDefaultSemanticsSQL(y.DefaultSemantics) ||
@@ -1026,7 +1026,7 @@ func (g *generator) columnTypeWideningOnly(x, y *ast.ColumnDef) bool {
 	return isSafeSizedTypeWidening(x.Type, y.Type)
 }
 
-func isSafeSizedTypeWidening(from, to ast.SchemaType) bool {
+func isSafeSizedTypeWidening(from, to spanast.SchemaType) bool {
 	fromName, fromSize, fromMax, ok := sizedStringOrBytes(from)
 	if !ok {
 		return false
@@ -1044,12 +1044,12 @@ func isSafeSizedTypeWidening(from, to ast.SchemaType) bool {
 	return toSize >= fromSize
 }
 
-func sizedStringOrBytes(t ast.SchemaType) (ast.ScalarTypeName, int, bool, bool) {
-	sized, ok := t.(*ast.SizedSchemaType)
+func sizedStringOrBytes(t spanast.SchemaType) (spanast.ScalarTypeName, int, bool, bool) {
+	sized, ok := t.(*spanast.SizedSchemaType)
 	if !ok {
 		return "", 0, false, false
 	}
-	if sized.Name != ast.StringTypeName && sized.Name != ast.BytesTypeName {
+	if sized.Name != spanast.StringTypeName && sized.Name != spanast.BytesTypeName {
 		return "", 0, false, false
 	}
 	if sized.Max {
@@ -1062,13 +1062,13 @@ func sizedStringOrBytes(t ast.SchemaType) (ast.ScalarTypeName, int, bool, bool) 
 	return sized.Name, size, false, true
 }
 
-func (g *generator) constraintEqual(x, y *ast.TableConstraint) bool {
+func (g *generator) constraintEqual(x, y *spanast.TableConstraint) bool {
 	xSQL := normalizeConstraintSQL(x.SQL())
 	ySQL := normalizeConstraintSQL(y.SQL())
 	return strings.EqualFold(xSQL, ySQL)
 }
 
-func (g *generator) sequenceEqual(x, y *ast.CreateSequence) bool {
+func (g *generator) sequenceEqual(x, y *spanast.CreateSequence) bool {
 	if !strings.EqualFold(comparablePath(x.Name), comparablePath(y.Name)) {
 		return false
 	}
@@ -1078,7 +1078,7 @@ func (g *generator) sequenceEqual(x, y *ast.CreateSequence) bool {
 	return g.optionsEqual(x.Options, y.Options)
 }
 
-func (g *generator) generateAlterSequence(from, to *ast.CreateSequence) ([]Statement, bool) {
+func (g *generator) generateAlterSequence(from, to *spanast.CreateSequence) ([]Statement, bool) {
 	if !reflect.DeepEqual(sequenceParamsSQL(from.Params), sequenceParamsSQL(to.Params)) {
 		return nil, false
 	}
@@ -1091,10 +1091,10 @@ func (g *generator) generateAlterSequence(from, to *ast.CreateSequence) ([]State
 			return nil, false
 		}
 	}
-	return []Statement{ddlStatement(&ast.AlterSequence{Name: to.Name, Options: options})}, true
+	return []Statement{ddlStatement(&spanast.AlterSequence{Name: to.Name, Options: options})}, true
 }
 
-func sequenceParamsSQL(params []ast.SequenceParam) []string {
+func sequenceParamsSQL(params []spanast.SequenceParam) []string {
 	result := make([]string, 0, len(params))
 	for _, param := range params {
 		result = append(result, normalizeSQL(param.SQL()))
@@ -1102,7 +1102,7 @@ func sequenceParamsSQL(params []ast.SequenceParam) []string {
 	return result
 }
 
-func (g *generator) indexEqualIgnoringStoring(x, y *ast.CreateIndex) bool {
+func (g *generator) indexEqualIgnoringStoring(x, y *spanast.CreateIndex) bool {
 	if !strings.EqualFold(comparableIdents(x.Name.Idents...), comparableIdents(y.Name.Idents...)) {
 		return false
 	}
@@ -1129,31 +1129,31 @@ func (g *generator) indexEqualIgnoringStoring(x, y *ast.CreateIndex) bool {
 	return true
 }
 
-func (g *generator) searchIndexEqual(x, y *ast.CreateSearchIndex) bool {
+func (g *generator) searchIndexEqual(x, y *spanast.CreateSearchIndex) bool {
 	return normalizeSQL(x.SQL()) == normalizeSQL(y.SQL())
 }
 
-func (g *generator) changeStreamForEqual(x, y ast.ChangeStreamFor) bool {
+func (g *generator) changeStreamForEqual(x, y spanast.ChangeStreamFor) bool {
 	return normalizeSQL(x.SQL()) == normalizeSQL(y.SQL())
 }
 
-func (g *generator) columnDefaultExprEqual(x, y ast.ColumnDefaultSemantics) bool {
+func (g *generator) columnDefaultExprEqual(x, y spanast.ColumnDefaultSemantics) bool {
 	return columnDefaultSemanticsSQL(x) == columnDefaultSemanticsSQL(y)
 }
 
-func (g *generator) rowDeletionPolicyEqual(x, y *ast.CreateRowDeletionPolicy) bool {
+func (g *generator) rowDeletionPolicyEqual(x, y *spanast.CreateRowDeletionPolicy) bool {
 	return normalizeSQL(x.SQL()) == normalizeSQL(y.SQL())
 }
 
-func (g *generator) optionsEqual(x, y *ast.Options) bool {
+func (g *generator) optionsEqual(x, y *spanast.Options) bool {
 	return reflect.DeepEqual(optionValueMap(x), optionValueMap(y))
 }
 
-func (g *generator) optionValueEqual(x, y *ast.Options, name string) bool {
+func (g *generator) optionValueEqual(x, y *spanast.Options, name string) bool {
 	return exprSQL(optionValueByName(x, name)) == exprSQL(optionValueByName(y, name))
 }
 
-func optionValueByName(options *ast.Options, name string) ast.Expr {
+func optionValueByName(options *spanast.Options, name string) spanast.Expr {
 	if options == nil {
 		return nil
 	}
@@ -1165,37 +1165,37 @@ func optionValueByName(options *ast.Options, name string) ast.Expr {
 	return nil
 }
 
-func defaultByScalarTypeName(name ast.ScalarTypeName) ast.Expr {
+func defaultByScalarTypeName(name spanast.ScalarTypeName) spanast.Expr {
 	if isUUIDScalarTypeName(name) {
 		return uuidDefaultExpr()
 	}
 	switch name {
-	case ast.BoolTypeName:
-		return &ast.BoolLiteral{Value: false}
-	case ast.Int64TypeName:
-		return &ast.IntLiteral{Value: "0"}
-	case ast.Float32TypeName, ast.Float64TypeName:
-		return &ast.FloatLiteral{Value: "0"}
-	case ast.StringTypeName:
-		return &ast.StringLiteral{Value: ""}
-	case ast.BytesTypeName:
-		return &ast.BytesLiteral{Value: nil}
-	case ast.DateTypeName:
-		return &ast.DateLiteral{Value: &ast.StringLiteral{Value: "0001-01-01"}}
-	case ast.TimestampTypeName:
-		return &ast.TimestampLiteral{Value: &ast.StringLiteral{Value: "0001-01-01T00:00:00Z"}}
-	case ast.NumericTypeName:
-		return &ast.NumericLiteral{Value: &ast.StringLiteral{Value: "0"}}
-	case ast.JSONTypeName:
-		return &ast.JSONLiteral{Value: &ast.StringLiteral{Value: "{}"}}
-	case ast.TokenListTypeName:
-		return &ast.BytesLiteral{Value: nil}
+	case spanast.BoolTypeName:
+		return &spanast.BoolLiteral{Value: false}
+	case spanast.Int64TypeName:
+		return &spanast.IntLiteral{Value: "0"}
+	case spanast.Float32TypeName, spanast.Float64TypeName:
+		return &spanast.FloatLiteral{Value: "0"}
+	case spanast.StringTypeName:
+		return &spanast.StringLiteral{Value: ""}
+	case spanast.BytesTypeName:
+		return &spanast.BytesLiteral{Value: nil}
+	case spanast.DateTypeName:
+		return &spanast.DateLiteral{Value: &spanast.StringLiteral{Value: "0001-01-01"}}
+	case spanast.TimestampTypeName:
+		return &spanast.TimestampLiteral{Value: &spanast.StringLiteral{Value: "0001-01-01T00:00:00Z"}}
+	case spanast.NumericTypeName:
+		return &spanast.NumericLiteral{Value: &spanast.StringLiteral{Value: "0"}}
+	case spanast.JSONTypeName:
+		return &spanast.JSONLiteral{Value: &spanast.StringLiteral{Value: "{}"}}
+	case spanast.TokenListTypeName:
+		return &spanast.BytesLiteral{Value: nil}
 	default:
 		panic("unsupported scalar default")
 	}
 }
 
-func uuidDefaultExpr() ast.Expr {
+func uuidDefaultExpr() spanast.Expr {
 	expr, err := defaultUUIDExprOnce()
 	if err != nil {
 		panic(fmt.Sprintf("parsing %q expression: %v", "NEW_UUID()", err))
@@ -1203,11 +1203,11 @@ func uuidDefaultExpr() ast.Expr {
 	return expr
 }
 
-func isUUIDScalarTypeName(name ast.ScalarTypeName) bool {
+func isUUIDScalarTypeName(name spanast.ScalarTypeName) bool {
 	return strings.EqualFold(string(name), "UUID")
 }
 
-func isUUIDNamedType(t *ast.NamedType) bool {
+func isUUIDNamedType(t *spanast.NamedType) bool {
 	return t != nil && len(t.Path) == 1 && strings.EqualFold(t.Path[0].Name, "UUID")
 }
 
@@ -1228,18 +1228,18 @@ func (g *generator) viewEqual(x, y *View) bool {
 	return normalizeSQL(x.Raw.SQL()) == normalizeSQL(y.Raw.SQL())
 }
 
-func (g *generator) setDefaultSemantics(col *ast.ColumnDef) *ast.ColumnDef {
+func (g *generator) setDefaultSemantics(col *spanast.ColumnDef) *spanast.ColumnDef {
 	columnCopy := *col
 	switch t := col.Type.(type) {
-	case *ast.ArraySchemaType:
-		columnCopy.DefaultSemantics = &ast.ColumnDefaultExpr{Expr: &ast.ArrayLiteral{}}
-	case *ast.ScalarSchemaType:
-		columnCopy.DefaultSemantics = &ast.ColumnDefaultExpr{Expr: defaultByScalarTypeName(t.Name)}
-	case *ast.SizedSchemaType:
-		columnCopy.DefaultSemantics = &ast.ColumnDefaultExpr{Expr: defaultByScalarTypeName(t.Name)}
-	case *ast.NamedType:
+	case *spanast.ArraySchemaType:
+		columnCopy.DefaultSemantics = &spanast.ColumnDefaultExpr{Expr: &spanast.ArrayLiteral{}}
+	case *spanast.ScalarSchemaType:
+		columnCopy.DefaultSemantics = &spanast.ColumnDefaultExpr{Expr: defaultByScalarTypeName(t.Name)}
+	case *spanast.SizedSchemaType:
+		columnCopy.DefaultSemantics = &spanast.ColumnDefaultExpr{Expr: defaultByScalarTypeName(t.Name)}
+	case *spanast.NamedType:
 		if isUUIDNamedType(t) {
-			columnCopy.DefaultSemantics = &ast.ColumnDefaultExpr{Expr: uuidDefaultExpr()}
+			columnCopy.DefaultSemantics = &spanast.ColumnDefaultExpr{Expr: uuidDefaultExpr()}
 		}
 	}
 	return &columnCopy
@@ -1263,7 +1263,7 @@ func (g *generator) findColumnByKey(columns []*Column, key string) (*Column, boo
 	return nil, false
 }
 
-func (g *generator) findColumnDefByKey(columns []*ast.ColumnDef, key string) (*ast.ColumnDef, bool) {
+func (g *generator) findColumnDefByKey(columns []*spanast.ColumnDef, key string) (*spanast.ColumnDef, bool) {
 	for _, column := range columns {
 		if strings.EqualFold(comparableIdent(column.Name), key) {
 			return column, true
@@ -1272,7 +1272,7 @@ func (g *generator) findColumnDefByKey(columns []*ast.ColumnDef, key string) (*a
 	return nil, false
 }
 
-func (g *generator) findIdentByKey(idents []*ast.Ident, key string) (*ast.Ident, bool) {
+func (g *generator) findIdentByKey(idents []*spanast.Ident, key string) (*spanast.Ident, bool) {
 	for _, ident := range idents {
 		if strings.EqualFold(comparableIdent(ident), key) {
 			return ident, true
@@ -1281,7 +1281,7 @@ func (g *generator) findIdentByKey(idents []*ast.Ident, key string) (*ast.Ident,
 	return nil, false
 }
 
-func (g *generator) findNamedConstraint(constraints []*ast.TableConstraint, key string) (*ast.TableConstraint, bool) {
+func (g *generator) findNamedConstraint(constraints []*spanast.TableConstraint, key string) (*spanast.TableConstraint, bool) {
 	if key == "" {
 		return nil, false
 	}
@@ -1293,7 +1293,7 @@ func (g *generator) findNamedConstraint(constraints []*ast.TableConstraint, key 
 	return nil, false
 }
 
-func (g *generator) findUnnamedConstraint(constraints []*ast.TableConstraint, item *ast.TableConstraint) (*ast.TableConstraint, bool) {
+func (g *generator) findUnnamedConstraint(constraints []*spanast.TableConstraint, item *spanast.TableConstraint) (*spanast.TableConstraint, bool) {
 	for _, constraint := range constraints {
 		if g.constraintEqual(constraint, item) {
 			return constraint, true
@@ -1417,7 +1417,7 @@ func (g *generator) generateDropView(view *View) []Statement {
 		}
 		g.droppedGrants = append(g.droppedGrants, grant)
 	}
-	return []Statement{ddlStatement(&ast.DropView{Name: view.Raw.Name})}
+	return []Statement{ddlStatement(&spanast.DropView{Name: view.Raw.Name})}
 }
 
 func (g *generator) findRoleByKey(roles []*Role, key string) (*Role, bool) {
@@ -1441,7 +1441,7 @@ func (g *generator) generateDropRole(role *Role) []Statement {
 		}
 		stmts = append(stmts, g.generateRevokeAll(grant)...)
 	}
-	stmts = append(stmts, ddlStatement(&ast.DropRole{Name: role.Raw.Name}))
+	stmts = append(stmts, ddlStatement(&spanast.DropRole{Name: role.Raw.Name}))
 	return stmts
 }
 
@@ -1458,7 +1458,7 @@ func (g *generator) generateRevokeAll(grant *Grant) []Statement {
 	if grant == nil || len(grant.Raw.Roles) == 0 {
 		return nil
 	}
-	return []Statement{ddlStatement(&ast.Revoke{
+	return []Statement{ddlStatement(&spanast.Revoke{
 		Privilege: grant.Raw.Privilege,
 		Roles:     grant.Raw.Roles,
 	})}
@@ -1469,7 +1469,7 @@ func (g *generator) existsGrantResourceIn(grant *Grant, database *Database) bool
 		return false
 	}
 	switch privilege := grant.Raw.Privilege.(type) {
-	case *ast.PrivilegeOnTable:
+	case *spanast.PrivilegeOnTable:
 		for _, name := range privilege.Names {
 			for _, table := range database.tables {
 				if comparablePath(name) == table.Key {
@@ -1478,33 +1478,33 @@ func (g *generator) existsGrantResourceIn(grant *Grant, database *Database) bool
 			}
 		}
 		return false
-	case *ast.SelectPrivilegeOnView:
+	case *spanast.SelectPrivilegeOnView:
 		for _, name := range privilege.Names {
 			if _, exists := g.findViewByKey(database.views, comparablePath(name)); exists {
 				return true
 			}
 		}
 		return false
-	case *ast.SelectPrivilegeOnChangeStream:
+	case *spanast.SelectPrivilegeOnChangeStream:
 		for _, name := range privilege.Names {
 			if _, exists := g.findChangeStreamByKey(database, comparablePath(name)); exists {
 				return true
 			}
 		}
 		return false
-	case *ast.ExecutePrivilegeOnTableFunction:
+	case *spanast.ExecutePrivilegeOnTableFunction:
 		return true
 	default:
 		return false
 	}
 }
 
-func changeStreamType(changeStream *ast.CreateChangeStream) string {
+func changeStreamType(changeStream *spanast.CreateChangeStream) string {
 	if changeStream.For == nil {
 		return changeStreamTypeNone
 	}
 	switch changeStream.For.(type) {
-	case *ast.ChangeStreamForTables:
+	case *spanast.ChangeStreamForTables:
 		return changeStreamTypeTables
 	default:
 		return changeStreamTypeAll
@@ -1517,42 +1517,42 @@ const (
 	changeStreamTypeTables = "TABLES"
 )
 
-func cloneOptions(options *ast.Options) *ast.Options {
+func cloneOptions(options *spanast.Options) *spanast.Options {
 	if options == nil {
 		return nil
 	}
-	cloned := &ast.Options{Records: make([]*ast.OptionsDef, 0, len(options.Records))}
+	cloned := &spanast.Options{Records: make([]*spanast.OptionsDef, 0, len(options.Records))}
 	for _, record := range options.Records {
-		cloned.Records = append(cloned.Records, &ast.OptionsDef{
-			Name:  &ast.Ident{Name: record.Name.Name},
+		cloned.Records = append(cloned.Records, &spanast.OptionsDef{
+			Name:  &spanast.Ident{Name: record.Name.Name},
 			Value: record.Value,
 		})
 	}
 	return cloned
 }
 
-func optionsSQL(options *ast.Options) string {
+func optionsSQL(options *spanast.Options) string {
 	if options == nil {
 		return ""
 	}
 	return options.SQL()
 }
 
-func columnDefaultSemanticsSQL(semantics ast.ColumnDefaultSemantics) string {
+func columnDefaultSemanticsSQL(semantics spanast.ColumnDefaultSemantics) string {
 	if semantics == nil {
 		return ""
 	}
 	return semantics.SQL()
 }
 
-func exprSQL(expr ast.Expr) string {
+func exprSQL(expr spanast.Expr) string {
 	if expr == nil {
 		return ""
 	}
 	return expr.SQL()
 }
 
-func optionValueMap(options *ast.Options) map[string]string {
+func optionValueMap(options *spanast.Options) map[string]string {
 	result := make(map[string]string)
 	if options == nil {
 		return result
@@ -1563,8 +1563,8 @@ func optionValueMap(options *ast.Options) map[string]string {
 	return result
 }
 
-func changedOptions(from, to *ast.Options) *ast.Options {
-	var records []*ast.OptionsDef
+func changedOptions(from, to *spanast.Options) *spanast.Options {
+	var records []*spanast.OptionsDef
 	fromValues := optionValueMap(from)
 	toValues := optionValueMap(to)
 
@@ -1574,7 +1574,7 @@ func changedOptions(from, to *ast.Options) *ast.Options {
 			if fromValue, exists := fromValues[name]; exists && fromValue == record.Value.SQL() {
 				continue
 			}
-			records = append(records, &ast.OptionsDef{Name: record.Name, Value: record.Value})
+			records = append(records, &spanast.OptionsDef{Name: record.Name, Value: record.Value})
 		}
 	}
 
@@ -1584,9 +1584,9 @@ func changedOptions(from, to *ast.Options) *ast.Options {
 			if _, exists := toValues[name]; exists {
 				continue
 			}
-			records = append(records, &ast.OptionsDef{
-				Name:  &ast.Ident{Name: name},
-				Value: &ast.NullLiteral{},
+			records = append(records, &spanast.OptionsDef{
+				Name:  &spanast.Ident{Name: name},
+				Value: &spanast.NullLiteral{},
 			})
 		}
 	}
@@ -1594,7 +1594,7 @@ func changedOptions(from, to *ast.Options) *ast.Options {
 	if len(records) == 0 {
 		return nil
 	}
-	return &ast.Options{Records: records}
+	return &spanast.Options{Records: records}
 }
 
 func normalizeSQL(sql string) string {
@@ -1778,14 +1778,14 @@ func normalizeOnDelete(onDelete string) string {
 	return onDelete
 }
 
-func normalizeDirection(dir ast.Direction) ast.Direction {
+func normalizeDirection(dir spanast.Direction) spanast.Direction {
 	if dir == "" {
-		return ast.DirectionAsc
+		return spanast.DirectionAsc
 	}
 	return dir
 }
 
-func comparableInterleaveIn(interleave *ast.InterleaveIn) string {
+func comparableInterleaveIn(interleave *spanast.InterleaveIn) string {
 	if interleave == nil {
 		return ""
 	}
@@ -1799,7 +1799,7 @@ func equalGrant(a, b *Grant) bool {
 	return equalASTGrant(a.Raw, b.Raw)
 }
 
-func equalASTGrant(a, b *ast.Grant) bool {
+func equalASTGrant(a, b *spanast.Grant) bool {
 	if a == nil || b == nil {
 		return a == b
 	}
@@ -1809,7 +1809,7 @@ func equalASTGrant(a, b *ast.Grant) bool {
 	return equalIdentLists(a.Roles, b.Roles)
 }
 
-func equalPrivilege(a, b ast.Privilege) bool {
+func equalPrivilege(a, b spanast.Privilege) bool {
 	if a == nil || b == nil {
 		return a == b
 	}
@@ -1818,27 +1818,27 @@ func equalPrivilege(a, b ast.Privilege) bool {
 	}
 
 	switch left := a.(type) {
-	case *ast.PrivilegeOnTable:
-		right := b.(*ast.PrivilegeOnTable)
+	case *spanast.PrivilegeOnTable:
+		right := b.(*spanast.PrivilegeOnTable)
 		return equalPathLists(left.Names, right.Names) && equalTablePrivileges(left.Privileges, right.Privileges)
-	case *ast.SelectPrivilegeOnChangeStream:
-		right := b.(*ast.SelectPrivilegeOnChangeStream)
+	case *spanast.SelectPrivilegeOnChangeStream:
+		right := b.(*spanast.SelectPrivilegeOnChangeStream)
 		return equalPathLists(left.Names, right.Names)
-	case *ast.SelectPrivilegeOnView:
-		right := b.(*ast.SelectPrivilegeOnView)
+	case *spanast.SelectPrivilegeOnView:
+		right := b.(*spanast.SelectPrivilegeOnView)
 		return equalPathLists(left.Names, right.Names)
-	case *ast.ExecutePrivilegeOnTableFunction:
-		right := b.(*ast.ExecutePrivilegeOnTableFunction)
+	case *spanast.ExecutePrivilegeOnTableFunction:
+		right := b.(*spanast.ExecutePrivilegeOnTableFunction)
 		return equalPathLists(left.Names, right.Names)
-	case *ast.RolePrivilege:
-		right := b.(*ast.RolePrivilege)
+	case *spanast.RolePrivilege:
+		right := b.(*spanast.RolePrivilege)
 		return equalIdentLists(left.Names, right.Names)
 	default:
 		return normalizeSQL(fmt.Sprintf("%#v", a)) == normalizeSQL(fmt.Sprintf("%#v", b))
 	}
 }
 
-func equalTablePrivileges(a, b []ast.TablePrivilege) bool {
+func equalTablePrivileges(a, b []spanast.TablePrivilege) bool {
 	if len(a) != len(b) {
 		return false
 	}
@@ -1850,32 +1850,32 @@ func equalTablePrivileges(a, b []ast.TablePrivilege) bool {
 	return true
 }
 
-func matchTablePrivilege(a, b ast.TablePrivilege) bool {
+func matchTablePrivilege(a, b spanast.TablePrivilege) bool {
 	if reflect.TypeOf(a) != reflect.TypeOf(b) {
 		return false
 	}
 	switch left := a.(type) {
-	case *ast.SelectPrivilege:
-		right := b.(*ast.SelectPrivilege)
+	case *spanast.SelectPrivilege:
+		right := b.(*spanast.SelectPrivilege)
 		return equalIdentLists(left.Columns, right.Columns)
-	case *ast.InsertPrivilege:
-		right := b.(*ast.InsertPrivilege)
+	case *spanast.InsertPrivilege:
+		right := b.(*spanast.InsertPrivilege)
 		return equalIdentLists(left.Columns, right.Columns)
-	case *ast.UpdatePrivilege:
-		right := b.(*ast.UpdatePrivilege)
+	case *spanast.UpdatePrivilege:
+		right := b.(*spanast.UpdatePrivilege)
 		return equalIdentLists(left.Columns, right.Columns)
-	case *ast.DeletePrivilege:
+	case *spanast.DeletePrivilege:
 		return true
 	default:
 		return normalizeSQL(fmt.Sprintf("%#v", a)) == normalizeSQL(fmt.Sprintf("%#v", b))
 	}
 }
 
-func equalIdentLists(a, b []*ast.Ident) bool {
+func equalIdentLists(a, b []*spanast.Ident) bool {
 	return comparableIdents(a...) == comparableIdents(b...)
 }
 
-func equalPathLists(a, b []*ast.Path) bool {
+func equalPathLists(a, b []*spanast.Path) bool {
 	var left []string
 	for _, path := range a {
 		left = append(left, comparablePath(path))
@@ -1887,26 +1887,26 @@ func equalPathLists(a, b []*ast.Path) bool {
 	return strings.Join(left, ",") == strings.Join(right, ",")
 }
 
-func hasPrivilegeOnColumn(privilege *ast.PrivilegeOnTable, column *ast.Ident) bool {
+func hasPrivilegeOnColumn(privilege *spanast.PrivilegeOnTable, column *spanast.Ident) bool {
 	if privilege == nil || column == nil {
 		return false
 	}
 	target := comparableIdent(column)
 	for _, tablePrivilege := range privilege.Privileges {
 		switch p := tablePrivilege.(type) {
-		case *ast.SelectPrivilege:
+		case *spanast.SelectPrivilege:
 			for _, col := range p.Columns {
 				if comparableIdent(col) == target {
 					return true
 				}
 			}
-		case *ast.InsertPrivilege:
+		case *spanast.InsertPrivilege:
 			for _, col := range p.Columns {
 				if comparableIdent(col) == target {
 					return true
 				}
 			}
-		case *ast.UpdatePrivilege:
+		case *spanast.UpdatePrivilege:
 			for _, col := range p.Columns {
 				if comparableIdent(col) == target {
 					return true

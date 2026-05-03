@@ -19,7 +19,7 @@ import (
 	"strings"
 
 	"github.com/cloudspannerecosystem/memefish"
-	"github.com/cloudspannerecosystem/memefish/ast"
+	spanast "github.com/cloudspannerecosystem/memefish/ast"
 )
 
 // StatementKind represents the type of a SQL statement.
@@ -60,9 +60,9 @@ func ClassifyStatement(sql string) (StatementKind, error) {
 	}
 
 	switch stmt.(type) {
-	case ast.DDL:
+	case spanast.DDL:
 		return KindDDL, nil
-	case ast.DML:
+	case spanast.DML:
 		if isPartitionedDML(sql) {
 			return KindPartitionedDML, nil
 		}

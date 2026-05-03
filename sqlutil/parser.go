@@ -19,21 +19,21 @@ import (
 	"strings"
 
 	"github.com/cloudspannerecosystem/memefish"
-	"github.com/cloudspannerecosystem/memefish/ast"
+	spanast "github.com/cloudspannerecosystem/memefish/ast"
 )
 
 // ParseDDLs parses a SQL string containing multiple DDL statements and returns the AST nodes.
-func ParseDDLs(sql string) ([]ast.DDL, error) {
+func ParseDDLs(sql string) ([]spanast.DDL, error) {
 	return memefish.ParseDDLs("", sql)
 }
 
 // ParseStatements parses a SQL string containing multiple statements of any kind.
-func ParseStatements(sql string) ([]ast.Statement, error) {
+func ParseStatements(sql string) ([]spanast.Statement, error) {
 	return memefish.ParseStatements("", sql)
 }
 
 // ParseExpr parses a SQL expression and returns the AST node.
-func ParseExpr(sql string) (ast.Expr, error) {
+func ParseExpr(sql string) (spanast.Expr, error) {
 	return memefish.ParseExpr("", sql)
 }
 
