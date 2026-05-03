@@ -1740,7 +1740,7 @@ func (n *sqlNormalizer) writeQuotedSQL(raw bool) {
 					return
 				}
 				n.next()
-				return
+				continue
 			}
 			n.next()
 			continue
