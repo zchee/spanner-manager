@@ -1,0 +1,18 @@
+{
+  "cli_version": "dev",
+  "checkpoint_id": "4899eac65a45",
+  "strategy": "manual-commit",
+  "branch": "refactor",
+  "checkpoints_count": 0,
+  "files_touched": [
+    "codegen/languages/go/templates/spanner_db.go.tmpl"
+  ],
+  "sessions": [
+    {
+      "metadata": "/48/99eac65a45/0/metadata.json",
+      "transcript": "/48/99eac65a45/0/full.jsonl",
+      "content_hash": "/48/99eac65a45/0/content_hash.txt",
+      "prompt": ""
+    }
+  ]
+}
